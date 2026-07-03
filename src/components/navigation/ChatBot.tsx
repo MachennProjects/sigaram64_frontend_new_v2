@@ -95,7 +95,7 @@ function getFollowUpSuggestions(reply: string, lang: 'en' | 'ta'): string[] {
 }
 
 function ChatBotPanel({ onClose }: { onClose: () => void }) {
-  const { user } = useAuth(); // Retrieve active student context details
+  const { user } = useAuth();
 
   // Sync initial language state with the application settings (sessionStorage)
   const [lang, setLang] = useState<'en' | 'ta'>(() => {
@@ -123,6 +123,11 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     return isTa ? INITIAL_SUGGESTIONS_TA : INITIAL_SUGGESTIONS_EN;
   });
   const messagesEndRef                 = useRef<HTMLDivElement>(null);
+
+  // --- Voice Read Aloud States (English Only) ---
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [playingAudio, setPlayingAudio]   = useState(false);
+  const activeAudioRef                    = useRef<HTMLAudioElement | null>(null);
 
   // Sync state if user clicks global toggle in header
   useEffect(() => {
@@ -169,6 +174,65 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, suggestions]);
 
+  // Clean up any active audio sessions on unmount
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, []);
+
+  // --- Voice TTS (Text-to-Speech) Read Aloud functions (English only) ---
+  async function readAloud(text: string, index: number) {
+    if (playingAudio) {
+      if (speakingIndex === index) {
+        stopAudio();
+        return;
+      }
+      stopAudio();
+    }
+
+    setSpeakingIndex(index);
+    setPlayingAudio(true);
+
+    try {
+      const res = await chatbotApi.textToSpeech(text, lang);
+      if (res?.audio) {
+        const audioUrl = `data:audio/mp3;base64,${res.audio}`;
+        const audio = new Audio(audioUrl);
+        activeAudioRef.current = audio;
+
+        audio.onended = () => {
+          setSpeakingIndex(null);
+          setPlayingAudio(false);
+        };
+
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e);
+          setSpeakingIndex(null);
+          setPlayingAudio(false);
+        };
+
+        await audio.play();
+      } else {
+        setSpeakingIndex(null);
+        setPlayingAudio(false);
+      }
+    } catch (err) {
+      console.error('TTS synthesis failed:', err);
+      setSpeakingIndex(null);
+      setPlayingAudio(false);
+    }
+  }
+
+  function stopAudio() {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    setSpeakingIndex(null);
+    setPlayingAudio(false);
+  }
+
   async function sendMessage(text?: string) {
     const userText = (text ?? input).trim();
     if (!userText || loading) return;
@@ -179,6 +243,9 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     setMessages(m => [...m, { role: 'user', text: userText }]);
     setInput('');
     setLoading(true);
+
+    // Stop speaking if user types a new question
+    stopAudio();
 
     // --- 1. Client-Side Greeting Interception ---
     const GREETINGS = ['hi', 'hello', 'hey', 'வணக்கம்', 'ஹலோ', 'hi there', 'hello there', 'greetings', 'vanakkam'];
@@ -194,17 +261,15 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
             : `Hello, ${nameStr}! 👋 I am Mantri, your AI chess coach. How can I help you today?`
         }]);
         setLoading(false);
-      }, 300); // 300ms delay to feel natural
+      }, 300);
       return;
     }
 
     // --- 2. Standard Query Proxy Pipeline ---
     try {
-      // Calls backend /api/chatbot/ask → backend proxies securely
       const res = await chatbotApi.ask(userText, activeFen, lang);
       setMessages(m => [...m, { role: 'bot', text: res.reply }]);
       
-      // Generate and apply new suggestions based on the response content & language
       const nextSuggestions = getFollowUpSuggestions(res.reply, lang);
       setSuggestions(nextSuggestions);
     } catch (err) {
@@ -224,17 +289,14 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // Dynamically calculate what suggestions to render
   const renderedSuggestions = (() => {
     const activeFen = (window as any).currentChessBoardFen;
     if (!activeFen) return suggestions;
 
-    // Prepend the board analysis request card if there is an active board on the page
     const boardQuestion = lang === 'ta'
       ? '🔍 எனது தற்போதைய போர்டு நிலையை விளக்கு'
       : '🔍 Explain my current board position';
 
-    // Avoid duplicating the board question if it's already there
     if (suggestions.includes(boardQuestion) || suggestions.some(s => s.includes('board position') || s.includes('போர்டு நிலையை'))) {
       return suggestions;
     }
@@ -269,7 +331,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
           className="ml-auto mr-3 px-2 py-0.5 rounded-md border border-gold/40 bg-navy text-[9px] font-bold text-gold hover:bg-gold hover:text-navy transition-all active:scale-95 duration-150 uppercase tracking-wider"
           title="Switch Language / மொழியை மாற்றவும்"
         >
-          {lang === 'en' ? 'English' : 'தமிழ்'}
+          {lang === 'en' ? 'தமிழ்' : 'ENGLISH'}
         </button>
 
         <button onClick={onClose} className="text-gray-400 hover:text-white text-lg transition-colors">✕</button>
@@ -277,22 +339,41 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3" style={{ maxHeight: '320px' }}>
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slideUp`}>
-            {m.role === 'bot' && (
-              <span className="text-base mr-1.5 flex-shrink-0 mt-0.5 select-none">🤖</span>
-            )}
-            <div
-              className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap transition-all shadow-md ${
-                m.role === 'user'
-                  ? 'bg-gold text-navy font-bold rounded-br-sm'
-                  : 'bg-navy-mid text-gray-200 border border-[#1E2E52]/40 rounded-bl-sm'
-              }`}
-            >
-              {m.text}
+        {messages.map((m, i) => {
+          const isBot = m.role === 'bot';
+          const isSpeaking = speakingIndex === i;
+          return (
+            <div key={i} className={`flex ${isBot ? 'justify-start' : 'justify-end'} items-start animate-slideUp`}>
+              {isBot && (
+                <span className="text-base mr-1.5 flex-shrink-0 mt-0.5 select-none">🤖</span>
+              )}
+              <div className="relative group max-w-[85%] flex items-end gap-1.5">
+                <div
+                  className={`px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap transition-all shadow-md ${
+                    m.role === 'user'
+                      ? 'bg-gold text-navy font-bold rounded-br-sm'
+                      : 'bg-navy-mid text-gray-200 border border-[#1E2E52]/40 rounded-bl-sm'
+                  }`}
+                >
+                  {m.text}
+                </div>
+
+                {isBot && lang === 'en' && (
+                  <button
+                    onClick={() => readAloud(m.text, i)}
+                    disabled={loading}
+                    className={`p-1 rounded-md text-[11px] opacity-60 hover:opacity-100 transition-opacity active:scale-90 flex-shrink-0 ${
+                      isSpeaking ? 'text-gold animate-bounce' : 'text-gray-400'
+                    }`}
+                    title={isSpeaking ? 'Stop Reading' : 'Read Aloud (Voice)'}
+                  >
+                    {isSpeaking ? '🎵' : '🔊'}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {loading && (
           <div className="flex justify-start items-center gap-2 animate-pulse">
@@ -338,7 +419,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input UI */}
       <div className="px-3 py-2 border-t border-[#1E2E52] flex items-center gap-2 flex-shrink-0">
         <input
           type="text"
@@ -349,10 +430,11 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
           disabled={loading}
           className="flex-1 bg-dark-bg border border-[#1E2E52] rounded-full px-3 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-gold transition-colors disabled:opacity-50"
         />
+
         <button
           onClick={() => sendMessage()}
           disabled={loading || !input.trim()}
-          className="w-8 h-8 rounded-full bg-gold flex items-center justify-center text-navy text-sm font-bold hover:bg-gold-light transition-colors active:scale-90 disabled:opacity-50"
+          className="w-8 h-8 rounded-full bg-gold flex items-center justify-center text-navy text-sm font-bold hover:bg-gold-light transition-colors active:scale-90 disabled:opacity-50 flex-shrink-0"
         >
           →
         </button>
