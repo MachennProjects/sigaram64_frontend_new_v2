@@ -1,0 +1,106 @@
+// Unified Desktop Sidebar for all roles (Super Admin, Sub Admin, Student)
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { ADMIN_NAV, MANAGER_NAV, STUDENT_NAV_TABS } from '../navigation/navConfig';
+import logoHorizontal from '../../assets/Images/Logo/sigaram64_horizontal_transparent_3000.png';
+
+interface SidebarProps {
+  isOpen?: boolean;
+}
+
+export default function Sidebar({ isOpen = true }: SidebarProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!isOpen) return null;
+
+  const role = user?.role;
+  const isStudent    = role === 'student';
+  const isSuperAdmin = role === 'super_admin';
+  const isSubAdmin   = role === 'sub_admin';
+  const isAdmin      = isSuperAdmin || isSubAdmin;
+
+  // Determine Brand Header subtext
+  const subBrand = isStudent
+    ? 'Student Portal'
+    : isSuperAdmin
+      ? 'Super Admin Panel'
+      : 'Campus Portal';
+
+  // Unified active/inactive styling
+  const activeClass = 'bg-gold/10 text-gold border border-gold/30 font-semibold';
+  const inactiveClass = 'text-gray-400 border border-transparent hover:bg-navy-mid hover:text-white';
+
+  // Helper to render a navigation button
+  const renderNavButton = (item: { icon: string; label: string; path: string }) => {
+    const isActive = location.pathname === item.path;
+    return (
+      <button
+        key={item.path}
+        onClick={() => navigate(item.path)}
+        className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all active:scale-95 text-left ${isActive ? activeClass : inactiveClass
+          }`}
+      >
+        <span className="text-xl">{item.icon}</span>
+        <span className="text-sm">{item.label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-navy border-r border-divider flex-col overflow-y-auto z-50">
+      {/* Brand */}
+      <div className="px-5 py-4 border-b border-divider mb-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <img src={logoHorizontal} alt="SIGARAM64 Logo" className="h-14 w-auto object-contain" />
+        </div>
+        <p className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold ml-0.5">{subBrand}</p>
+      </div>
+
+      {/* Nav links */}
+      <nav className="flex-1 px-3 py-1 space-y-1">
+        {/* If Admin portal view */}
+        {!isStudent && (
+          <div className="space-y-1">
+            <p className="text-gray-600 text-[10px] font-semibold uppercase tracking-widest px-3 pb-1">
+              {isSuperAdmin ? 'Super Admin' : 'Campus'}
+            </p>
+            {(isSuperAdmin ? ADMIN_NAV : MANAGER_NAV).map(renderNavButton)}
+          </div>
+        )}
+
+        {/* Student links view (all roles can play chess) */}
+        <div className={!isStudent ? 'pt-4 space-y-1' : 'space-y-1'}>
+          {!isStudent && (
+            <p className="text-gray-600 text-[10px] font-semibold uppercase tracking-widest px-3 pb-1">
+              Play Chess
+            </p>
+          )}
+          {STUDENT_NAV_TABS.map(renderNavButton)}
+        </div>
+      </nav>
+
+      {/* Desktop Sidebar Profile Footer */}
+      <div
+        className="px-4 py-4 border-t border-divider bg-navy-mid mt-auto cursor-pointer hover:bg-navy transition-colors"
+        onClick={() => navigate('/profile')}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center">
+            <span className="text-navy font-bold text-lg">
+              {user?.avatar ?? user?.name?.[0] ?? (isSuperAdmin ? 'SA' : isSubAdmin ? 'CA' : 'S')}
+            </span>
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-white text-sm font-semibold truncate">{user?.name}</p>
+            <p className="text-gray-400 text-[10px]">
+              {isStudent ? 'Student' : isSuperAdmin ? 'Super Admin' : 'Campus Admin'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
