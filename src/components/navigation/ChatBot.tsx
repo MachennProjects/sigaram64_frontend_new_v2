@@ -1,12 +1,16 @@
-// Mantri AI Coach — Floating ChatBot (Routed through secure backend → Chess RAG API)
-import React, { useState, useRef, useEffect } from 'react';
+// Mantri AI Coach — Floating ChatBot with Voice Input (STT) & Voice Output (TTS)
+// Powered by Sarvam AI: Saaras v3 (STT) + Bulbul v3 (TTS) — Tamil & English
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { chatbotApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
+import { VOICE_CONFIG } from '../../config/voiceConfig';
 
 interface ChatMessage {
   role: 'user' | 'bot';
   text: string;
 }
+
+type MicState = 'idle' | 'recording' | 'processing';
 
 const INITIAL_SUGGESTIONS_EN = [
   'How to plan my next move like a master?',
@@ -109,25 +113,32 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     return [
       {
         role: 'bot',
-        text: isTa 
+        text: isTa
           ? `வணக்கம், ${nameStr}! 👋 நான் மந்திரி, உங்கள் சதுரங்க பயிற்சியாளர். சதுரங்க உத்திகள், தொடக்க ஆட்டங்கள் அல்லது உங்கள் விளையாட்டை மேம்படுத்துவது பற்றி எதையும் என்னிடம் கேளுங்கள்!`
           : `Hello, ${nameStr}! 👋 I am Mantri, your AI chess coach. Ask me anything about chess strategy, openings, tactics, or how to improve your game!`,
       }
     ];
   });
-  
+
   const [input, setInput]             = useState('');
   const [loading, setLoading]         = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(() => {
     const isTa = sessionStorage.getItem('sigaram64_quiz_lang') === 'tamil';
     return isTa ? INITIAL_SUGGESTIONS_TA : INITIAL_SUGGESTIONS_EN;
   });
-  const messagesEndRef                 = useRef<HTMLDivElement>(null);
+  const messagesEndRef                = useRef<HTMLDivElement>(null);
 
-  // --- Voice Read Aloud States (English Only) ---
+  // --- Voice Read Aloud (TTS) States ---
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [playingAudio, setPlayingAudio]   = useState(false);
   const activeAudioRef                    = useRef<HTMLAudioElement | null>(null);
+
+  // --- Voice Input (STT) States ---
+  const [micState, setMicState]     = useState<MicState>('idle');
+  const [voiceMode, setVoiceMode]   = useState(false); // true = user is using mic; auto-play TTS on reply
+  const voiceModeRef                = useRef(false);   // Ref mirrors state — safe to read inside async closures
+  const mediaRecorderRef            = useRef<MediaRecorder | null>(null);
+  const audioChunksRef              = useRef<Blob[]>([]);
 
   // Sync state if user clicks global toggle in header
   useEffect(() => {
@@ -146,6 +157,11 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       window.removeEventListener('quiz-lang-changed', handleLangChange);
     };
   }, []);
+
+  // Keep voiceModeRef in sync with voiceMode state so async closures always read the latest value
+  useEffect(() => {
+    voiceModeRef.current = voiceMode;
+  }, [voiceMode]);
 
   // Update suggestions list when local state language switches manually
   useEffect(() => {
@@ -178,10 +194,12 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     return () => {
       stopAudio();
+      stopRecording();
     };
   }, []);
 
-  // --- Voice TTS (Text-to-Speech) Read Aloud functions (English only) ---
+  // ─── TTS: Read Aloud ──────────────────────────────────────────────────────
+
   async function readAloud(text: string, index: number) {
     if (playingAudio) {
       if (speakingIndex === index) {
@@ -194,10 +212,14 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     setSpeakingIndex(index);
     setPlayingAudio(true);
 
+    // Pick speaker and pace from developer config based on current language
+    const speaker = lang === 'ta' ? VOICE_CONFIG.tamil.speaker : VOICE_CONFIG.english.speaker;
+    const pace    = lang === 'ta' ? VOICE_CONFIG.tamil.pace    : VOICE_CONFIG.english.pace;
+
     try {
-      const res = await chatbotApi.textToSpeech(text, lang);
+      const res = await chatbotApi.textToSpeech(text, lang, speaker, pace);
       if (res?.audio) {
-        const audioUrl = `data:audio/mp3;base64,${res.audio}`;
+        const audioUrl = `data:audio/wav;base64,${res.audio}`;
         const audio = new Audio(audioUrl);
         activeAudioRef.current = audio;
 
@@ -206,8 +228,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
           setPlayingAudio(false);
         };
 
-        audio.onerror = (e) => {
-          console.error('Audio playback error:', e);
+        audio.onerror = () => {
           setSpeakingIndex(null);
           setPlayingAudio(false);
         };
@@ -218,7 +239,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
         setPlayingAudio(false);
       }
     } catch (err) {
-      console.error('TTS synthesis failed:', err);
+      console.error('[TTS] synthesis failed:', err);
       setSpeakingIndex(null);
       setPlayingAudio(false);
     }
@@ -232,6 +253,79 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     setSpeakingIndex(null);
     setPlayingAudio(false);
   }
+
+  // ─── STT: Microphone Recording ────────────────────────────────────────────
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      // Prefer webm/opus — widely supported; fall back to whatever the browser offers
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : '';
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        // Stop all mic tracks to release the browser mic indicator
+        stream.getTracks().forEach(t => t.stop());
+
+        const blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+        const ext  = mimeType.includes('webm') ? 'webm' : 'wav';
+        const file = new File([blob], `voice-input.${ext}`, { type: blob.type });
+
+        setMicState('processing');
+        try {
+          const res = await chatbotApi.speechToText(file, lang);
+          const transcript = res?.transcription?.trim() ?? '';
+          if (transcript) {
+            // Option B: auto-send immediately — no input box fill
+            await sendMessage(transcript);
+          }
+        } catch (err) {
+          console.error('[STT] Transcription failed:', err);
+        } finally {
+          setMicState('idle');
+        }
+      };
+
+      recorder.start();
+      setMicState('recording');
+      setVoiceMode(true);
+    } catch (err) {
+      console.error('[Mic] Could not access microphone:', err);
+      setMicState('idle');
+      alert(lang === 'ta'
+        ? 'மைக்ரோஃபோனை அணுக முடியவில்லை. உலாவி அனுமதியை சரிபார்க்கவும்.'
+        : 'Could not access microphone. Please check browser permissions.');
+    }
+  }, [lang]);
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  function handleMicClick() {
+    if (micState === 'idle') {
+      startRecording();
+    } else if (micState === 'recording') {
+      stopRecording();
+    }
+    // 'processing' — do nothing, wait for async to finish
+  }
+
+  // ─── Send Message ─────────────────────────────────────────────────────────
 
   async function sendMessage(text?: string) {
     const userText = (text ?? input).trim();
@@ -253,14 +347,15 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
 
     if (GREETINGS.includes(cleaned)) {
       const nameStr = user?.name || (lang === 'ta' ? 'மாணவரே' : 'Student');
+      const greetText = lang === 'ta'
+        ? `வணக்கம், ${nameStr}! 👋 நான் மந்திரி, உங்கள் சதுரங்க பயிற்சியாளர். நான் உங்களுக்கு இன்று எவ்வாறு உதவ முடியும்?`
+        : `Hello, ${nameStr}! 👋 I am Mantri, your AI chess coach. How can I help you today?`;
       setTimeout(() => {
-        setMessages(m => [...m, {
-          role: 'bot',
-          text: lang === 'ta'
-            ? `வணக்கம், ${nameStr}! 👋 நான் மந்திரி, உங்கள் சதுரங்க பயிற்சியாளர். நான் உங்களுக்கு இன்று எவ்வாறு உதவ முடியும்?`
-            : `Hello, ${nameStr}! 👋 I am Mantri, your AI chess coach. How can I help you today?`
-        }]);
+        const greetIdx = messages.length + 1;
+        setMessages(m => [...m, { role: 'bot', text: greetText }]);
         setLoading(false);
+        // Auto-play TTS — use ref (not state) to avoid stale closure
+        if (voiceModeRef.current) readAloud(greetText, greetIdx);
       }, 300);
       return;
     }
@@ -268,18 +363,25 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     // --- 2. Standard Query Proxy Pipeline ---
     try {
       const res = await chatbotApi.ask(userText, activeFen, lang);
-      setMessages(m => [...m, { role: 'bot', text: res.reply }]);
-      
-      const nextSuggestions = getFollowUpSuggestions(res.reply, lang);
+      const botText = res.reply;
+      const botMsgIdx = messages.length + 1;
+      setMessages(m => [...m, { role: 'bot', text: botText }]);
+
+      const nextSuggestions = getFollowUpSuggestions(botText, lang);
       setSuggestions(nextSuggestions);
+
+      // Auto-play TTS — use ref (not state) to avoid stale closure bug
+      if (voiceModeRef.current) {
+        setTimeout(() => readAloud(botText, botMsgIdx), 300);
+      }
     } catch (err) {
       console.error('Chatbot query failed:', err);
       setMessages(m => [
         ...m,
         {
           role: 'bot',
-          text: lang === 'ta' 
-            ? 'மன்னிக்கவும், என்னால் இப்போது பதிலளிக்க முடியவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.' 
+          text: lang === 'ta'
+            ? 'மன்னிக்கவும், என்னால் இப்போது பதிலளிக்க முடியவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.'
             : 'Sorry, I am unable to reply at the moment. Please try again shortly.',
         },
       ]);
@@ -307,6 +409,24 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
   const lastMessage = messages[messages.length - 1];
   const showSuggestions = !loading && lastMessage && lastMessage.role === 'bot';
 
+  // ─── Mic button styles ────────────────────────────────────────────────────
+  const micBtnClass = (() => {
+    if (micState === 'recording') {
+      return 'w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/40 active:scale-90 transition-all';
+    }
+    if (micState === 'processing') {
+      return 'w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 bg-[#1E2E52] text-gray-400 cursor-not-allowed opacity-70';
+    }
+    return 'w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0 bg-[#1E2E52] text-gray-300 hover:bg-[#2A3F6B] hover:text-white active:scale-90 transition-all border border-[#2A3F6B]';
+  })();
+
+  const micIcon = micState === 'recording' ? '⏹' : micState === 'processing' ? '⏳' : '🎙️';
+  const micTitle = micState === 'recording'
+    ? (lang === 'ta' ? 'நிறுத்து' : 'Stop recording')
+    : micState === 'processing'
+    ? (lang === 'ta' ? 'மாற்றுகிறது...' : 'Transcribing...')
+    : (lang === 'ta' ? 'குரலில் கேள் (Tamil & English)' : 'Voice input (Tamil & English)');
+
   return (
     <div
       className="fixed bottom-20 lg:bottom-8 right-4 z-[60] w-80 flex flex-col rounded-2xl border border-gold/40 shadow-2xl overflow-hidden animate-slideUp text-xs animate-fadeIn"
@@ -324,6 +444,13 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
             </p>
           </div>
         </div>
+
+        {/* Voice mode indicator */}
+        {voiceMode && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gold/10 border border-gold/30 text-gold font-bold uppercase tracking-wider">
+            🎙 Voice
+          </span>
+        )}
 
         {/* Language Selection Toggle */}
         <button
@@ -358,14 +485,19 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
                   {m.text}
                 </div>
 
-                {isBot && lang === 'en' && (
+                {/* Read Aloud button — available for BOTH Tamil and English */}
+                {isBot && (
                   <button
                     onClick={() => readAloud(m.text, i)}
                     disabled={loading}
                     className={`p-1 rounded-md text-[11px] opacity-60 hover:opacity-100 transition-opacity active:scale-90 flex-shrink-0 ${
                       isSpeaking ? 'text-gold animate-bounce' : 'text-gray-400'
                     }`}
-                    title={isSpeaking ? 'Stop Reading' : 'Read Aloud (Voice)'}
+                    title={
+                      isSpeaking
+                        ? (lang === 'ta' ? 'நிறுத்து' : 'Stop Reading')
+                        : (lang === 'ta' ? 'குரலில் கேள்' : 'Read Aloud (Voice)')
+                    }
                   >
                     {isSpeaking ? '🎵' : '🔊'}
                   </button>
@@ -403,7 +535,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
                     key={i}
                     onClick={() => sendMessage(q.replace('🔍 ', ''))}
                     className={`w-full text-left text-[10px] rounded-lg px-3 py-1.5 transition-all hover:translate-x-1 active:scale-95 duration-200 leading-relaxed font-semibold ${
-                      isBoardAction 
+                      isBoardAction
                         ? 'text-cyan-400 border border-cyan-400/30 bg-cyan-400/5 hover:bg-cyan-400/15'
                         : 'text-gold border border-gold/20 bg-gold/5 hover:bg-gold/15'
                     }`}
@@ -421,13 +553,31 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
 
       {/* Input UI */}
       <div className="px-3 py-2 border-t border-[#1E2E52] flex items-center gap-2 flex-shrink-0">
+        {/* Mic button */}
+        <button
+          onClick={handleMicClick}
+          disabled={micState === 'processing' || loading}
+          className={micBtnClass}
+          title={micTitle}
+        >
+          {micIcon}
+        </button>
+
         <input
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && sendMessage()}
-          placeholder={lang === 'ta' ? 'சதுரங்கக் கேள்வி கேளுங்கள்...' : 'Ask a chess question…'}
-          disabled={loading}
+          onKeyDown={e => {
+            if (e.key === 'Enter') sendMessage();
+          }}
+          placeholder={
+            micState === 'recording'
+              ? (lang === 'ta' ? '🔴 பதிவு செய்கிறது...' : '🔴 Recording...')
+              : micState === 'processing'
+              ? (lang === 'ta' ? '⏳ மாற்றுகிறது...' : '⏳ Transcribing...')
+              : (lang === 'ta' ? 'சதுரங்கக் கேள்வி கேளுங்கள்...' : 'Ask a chess question…')
+          }
+          disabled={loading || micState === 'recording'}
           className="flex-1 bg-dark-bg border border-[#1E2E52] rounded-full px-3 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-gold transition-colors disabled:opacity-50"
         />
 

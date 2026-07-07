@@ -10,7 +10,7 @@ export const chatbotApi = {
     return apiPost('/api/chatbot/ask', { message, fen, language });
   },
 
-  /** Convert speech audio to text (Sarvam for Tamil, Whisper for English) */
+  /** Convert speech audio to text (Sarvam Saaras v3 — Tamil & English) */
   async speechToText(audioFile: File, language: 'ta' | 'en' = 'ta'): Promise<{ transcription: string }> {
     const formData = new FormData();
     formData.append('audio', audioFile);
@@ -18,13 +18,27 @@ export const chatbotApi = {
     return apiPostFormData('/api/chatbot/stt', formData);
   },
 
-  /** Convert text to speech audio (Sarvam for Tamil, ElevenLabs/Azure for English) */
-  async textToSpeech(text: string, language: 'ta' | 'en' = 'ta', provider = 'elevenlabs'): Promise<{ audio: string }> {
-    return apiPost('/api/chatbot/tts', { text, language, provider });
+  /**
+   * Convert text to speech audio (Sarvam Bulbul v3)
+   * @param speaker Sarvam speaker name — e.g. 'ishita', 'ratan'
+   * @param pace    Speaking speed 0.5 (slow) → 1.0 (natural) → 2.0 (fast)
+   */
+  async textToSpeech(
+    text: string,
+    language: 'ta' | 'en' = 'ta',
+    speaker = 'ishita',
+    pace = 1.0
+  ): Promise<{ audio: string }> {
+    return apiPost('/api/chatbot/tts', { text, language, speaker, pace, provider: 'sarvam' });
   },
 
   /** Full voice loop: audio in → transcribe → chatbot → synthesize → audio out */
-  async voice(audioFile: File, fen?: string, language: 'ta' | 'en' = 'ta', provider = 'elevenlabs'): Promise<{
+  async voice(
+    audioFile: File,
+    fen?: string,
+    language: 'ta' | 'en' = 'ta',
+    speaker = 'ishita'
+  ): Promise<{
     userText: string;
     botText: string;
     audio: string;
@@ -33,7 +47,8 @@ export const chatbotApi = {
     formData.append('audio', audioFile);
     if (fen) formData.append('fen', fen);
     formData.append('language', language);
-    formData.append('provider', provider);
+    formData.append('speaker', speaker);
+    formData.append('provider', 'sarvam');
     return apiPostFormData('/api/chatbot/voice', formData);
   },
 };
