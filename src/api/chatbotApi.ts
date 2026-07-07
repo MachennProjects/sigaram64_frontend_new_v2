@@ -3,11 +3,11 @@ import { apiPost, apiPostFormData } from './client';
 
 export const chatbotApi = {
   /** Send a text message to the Mantri chatbot */
-  async ask(message: string, fen?: string, language?: 'en' | 'ta'): Promise<{
+  async ask(message: string, fen?: string, language?: 'en' | 'ta', playerColor?: 'white' | 'black'): Promise<{
     reply: string;
     detectedLanguage: 'en' | 'ta';
   }> {
-    return apiPost('/api/chatbot/ask', { message, fen, language });
+    return apiPost('/api/chatbot/ask', { message, fen, language, playerColor });
   },
 
   /** Convert speech audio to text (Sarvam Saaras v3 — Tamil & English) */
@@ -37,7 +37,8 @@ export const chatbotApi = {
     audioFile: File,
     fen?: string,
     language: 'ta' | 'en' = 'ta',
-    speaker = 'ishita'
+    speaker = 'ishita',
+    playerColor?: 'white' | 'black'
   ): Promise<{
     userText: string;
     botText: string;
@@ -49,6 +50,7 @@ export const chatbotApi = {
     formData.append('language', language);
     formData.append('speaker', speaker);
     formData.append('provider', 'sarvam');
+    if (playerColor) formData.append('playerColor', playerColor);
     return apiPostFormData('/api/chatbot/voice', formData);
   },
 };

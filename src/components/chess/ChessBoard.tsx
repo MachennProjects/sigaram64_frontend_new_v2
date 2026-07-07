@@ -66,17 +66,19 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   /* Board data: 8x8 grid */
   const board = useMemo(() => game.board(), [game]);
 
-  /* Clear selection when position changes & expose FEN globally for Chatbot */
+  /* Clear selection when position changes & expose FEN + player color globally for Chatbot */
   useEffect(() => {
     setSelectedSquare(null);
     setLegalMoves([]);
     (window as any).currentChessBoardFen = position;
+    (window as any).currentPlayerColor = orientation ?? 'white'; // expose player color for Mantri AI
     return () => {
       if ((window as any).currentChessBoardFen === position) {
         (window as any).currentChessBoardFen = undefined;
+        (window as any).currentPlayerColor = undefined;
       }
     };
-  }, [position]);
+  }, [position, orientation]);
 
   /* Determine ordered files/ranks based on orientation */
   const orderedFiles = orientation === 'white' ? FILES : [...FILES].reverse();

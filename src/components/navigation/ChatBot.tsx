@@ -1,6 +1,5 @@
-// Mantri AI Coach — Floating ChatBot with Voice Input (STT) & Voice Output (TTS)
-// Powered by Sarvam AI: Saaras v3 (STT) + Bulbul v3 (TTS) — Tamil & English
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { chatbotApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { VOICE_CONFIG } from '../../config/voiceConfig';
@@ -15,24 +14,37 @@ type MicState = 'idle' | 'recording' | 'processing';
 const INITIAL_SUGGESTIONS_EN = [
   'How to plan my next move like a master?',
   'What is the best opening for beginners?',
-  'How do I improve my endgame?',
-  'Explain the concept of pawn structure.',
+  'Where can I play a game?',
+  'Where can I see my game history?',
+  'Where can I watch chess video lessons?',
+  'How do I change the chatbot language?',
 ];
 
 const INITIAL_SUGGESTIONS_TA = [
   'ஒரு மாஸ்டர் போல எனது அடுத்த நகர்வை எவ்வாறு திட்டமிடுவது?',
   'ஆரம்பநிலையினருக்கு சிறந்த தொடக்கம் எது?',
-  'எனது இறுதி ஆட்டத்தை எவ்வாறு மேம்படுத்துவது?',
-  'சிப்பாய் அமைப்பின் கருத்தை விளக்குங்கள்.',
+  'நான் எங்கு கேம் விளையாடலாம்?',
+  'எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்?',
+  'நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்?',
+  'எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது?',
 ];
 
-/**
- * Client-side bilingual keyword mapping engine. Analyzes the AI's reply and returns 3 highly
- * relevant follow-up questions in the chosen language.
- */
 function getFollowUpSuggestions(reply: string, lang: 'en' | 'ta'): string[] {
   const text = reply.toLowerCase();
   const isTa = lang === 'ta';
+
+  // Platform related
+  if (text.includes('sigaram') || text.includes('feature') || text.includes('rating') || text.includes('மதிப்பீடு') || text.includes('வசதி') || text.includes('புதிர்')) {
+    return isTa ? [
+      'நான் எங்கு கேம் விளையாடலாம்?',
+      'எனது சுயவிவரப் பக்கம் எங்கே உள்ளது?',
+      'எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்?'
+    ] : [
+      'Where can I play a game?',
+      'Where is my profile page?',
+      'Where can I see my game history?'
+    ];
+  }
 
   // Pawn structure related
   if (text.includes('pawn') || text.includes('structure') || text.includes('passed') || text.includes('chain') || text.includes('சிப்பாய்') || text.includes('அமைப்பு')) {
@@ -100,6 +112,42 @@ function getFollowUpSuggestions(reply: string, lang: 'en' | 'ta'): string[] {
 
 function ChatBotPanel({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Helper function to render text containing [Label](/path) as clickable buttons
+  function renderMessageText(text: string) {
+    const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      const label = match[1];
+      const path = match[2];
+      parts.push(
+        <span
+          key={match.index}
+          onClick={() => {
+            navigate(path);
+            onClose(); // Close chatbot panel on navigation
+          }}
+          className="text-gold hover:text-gold-light font-extrabold underline cursor-pointer select-none mx-0.5 focus:outline-none"
+        >
+          {label}
+        </span>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  }
 
   // Sync initial language state with the application settings (sessionStorage)
   const [lang, setLang] = useState<'en' | 'ta'>(() => {
@@ -216,8 +264,11 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     const speaker = lang === 'ta' ? VOICE_CONFIG.tamil.speaker : VOICE_CONFIG.english.speaker;
     const pace    = lang === 'ta' ? VOICE_CONFIG.tamil.pace    : VOICE_CONFIG.english.pace;
 
+    // Strip markdown links like [Label](/path) into "Label" so TTS doesn't read out the raw URLs
+    const cleanText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+
     try {
-      const res = await chatbotApi.textToSpeech(text, lang, speaker, pace);
+      const res = await chatbotApi.textToSpeech(cleanText, lang, speaker, pace);
       if (res?.audio) {
         const audioUrl = `data:audio/wav;base64,${res.audio}`;
         const audio = new Audio(audioUrl);
@@ -317,6 +368,9 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
   }
 
   function handleMicClick() {
+    // Stop any playing TTS audio immediately when the user interacts with the microphone
+    stopAudio();
+
     if (micState === 'idle') {
       startRecording();
     } else if (micState === 'recording') {
@@ -331,8 +385,9 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     const userText = (text ?? input).trim();
     if (!userText || loading) return;
 
-    // Get the current active ChessBoard FEN if it exists globally on the page
-    const activeFen = (window as any).currentChessBoardFen;
+    // Get the current active ChessBoard FEN and player color if it exists globally on the page
+    const activeFen   = (window as any).currentChessBoardFen;
+    const playerColor = (window as any).currentPlayerColor;
 
     setMessages(m => [...m, { role: 'user', text: userText }]);
     setInput('');
@@ -360,9 +415,87 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    // --- 1.2 Client-Side Navigation Questions Interception ---
+    const lowerText = userText.toLowerCase().trim();
+    
+    // English Checks
+    const isPlayGameEn    = lowerText.includes('where can i play') || lowerText.includes('play game') || lowerText.includes('how to play game') || lowerText === 'where can i play a game?';
+    const isProfileEn     = lowerText.includes('where is my profile') || lowerText.includes('profile page') || lowerText.includes('profile option') || lowerText === 'where is my profile page?';
+    const isHistoryEn     = lowerText.includes('where can i see my game history') || lowerText.includes('see my history') || lowerText.includes('game history') || lowerText.includes('my history') || lowerText === 'where can i see my game history?';
+    const isFamousEn      = lowerText.includes('where can i study famous') || lowerText.includes('famous games') || lowerText.includes('study famous chess games') || lowerText === 'where can i study famous chess games?';
+    const isLanguageEn    = lowerText.includes('how do i change the chatbot language') || lowerText.includes('change language') || lowerText.includes('chatbot language') || lowerText === 'how do i change the chatbot language?';
+    const isRatingEn      = lowerText.includes('where can i see my chess elo') || lowerText.includes('see my elo') || lowerText.includes('my rating') || lowerText.includes('elo rating') || lowerText === 'where can i see my chess elo rating?';
+    const isLessonsEn     = lowerText.includes('where can i watch chess video lessons') || lowerText.includes('watch lessons') || lowerText.includes('video lessons') || lowerText === 'where can i watch chess video lessons?';
+    const isAssessmentEn  = lowerText.includes('where can i take my chess assessment') || lowerText.includes('take my assessment') || lowerText.includes('chess assessment') || lowerText === 'where can i take my chess assessment?';
+
+    // Tamil Checks
+    const isPlayGameTa    = lowerText.includes('நான் எங்கு கேம் விளையாடலாம்') || lowerText.includes('விளையாடலாம்') || lowerText.includes('கேம் விளையாட') || lowerText === 'நான் எங்கு கேம் விளையாடலாம்?';
+    const isProfileTa     = lowerText.includes('எனது சுயவிவரப் பக்கம் எங்கே உள்ளது') || lowerText.includes('சுயவிவரப் பக்கம்') || lowerText.includes('பயனர் சுயவிவரம்') || lowerText === 'எனது சுயவிவரப் பக்கம் எங்கே உள்ளது?';
+    const isHistoryTa     = lowerText.includes('எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்') || lowerText.includes('விளையாட்டு வரலாறு') || lowerText.includes('வரலாறு எங்கே') || lowerText === 'எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்?';
+    const isFamousTa      = lowerText.includes('பிரபலமான சதுரங்க ஆட்டங்களை') || lowerText.includes('famous games') || lowerText.includes('ஆட்டங்களை எங்கு படிக்கலாம்') || lowerText === 'பிரபலமான சதுரங்க ஆட்டங்களை நான் எங்கு படிக்கலாம்?';
+    const isLanguageTa    = lowerText.includes('எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது') || lowerText.includes('சாட்பாட் மொழி') || lowerText.includes('மொழியை மாற்ற') || lowerText === 'எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது?';
+    const isRatingTa      = lowerText.includes('எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்') || lowerText.includes('elo மதிப்பீடு') || lowerText.includes('மதிப்பீட்டை எங்கே') || lowerText === 'எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்?';
+    const isLessonsTa     = lowerText.includes('நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்') || lowerText.includes('வீடியோ பாடங்கள்') || lowerText.includes('பாடங்களை பார்க்க') || lowerText === 'நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்?';
+    const isAssessmentTa  = lowerText.includes('நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்') || lowerText.includes('மதிப்பீட்டுத் தேர்வு') || lowerText.includes('தேர்வு எழுத') || lowerText === 'நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்?';
+
+    const isMobile = window.innerWidth < 1024;
+    let interceptReply = '';
+
+    if (isPlayGameEn) {
+      if (isMobile) {
+        interceptReply = "You can play games by clicking [Play Hub](/play) or [Play with AI](/play/ai) in the bottom navigation bar.";
+      } else {
+        interceptReply = "You can play games by clicking [Play Hub](/play) or [Play with AI](/play/ai) in the sidebar menu.";
+      }
+    } else if (isPlayGameTa) {
+      if (isMobile) {
+        interceptReply = "கீழே உள்ள நேவிகேஷன் பாரில் (Bottom Nav) [Play Hub](/play) அல்லது [Play with AI](/play/ai) என்பதை க்ளிக் செய்வதன் மூலம் நீங்கள் விளையாடலாம்.";
+      } else {
+        interceptReply = "பக்கவாட்டு மெனுவில் உள்ள [Play Hub](/play) அல்லது [Play with AI](/play/ai) ஐ க்ளிக் செய்வதன் மூலம் நீங்கள் விளையாடலாம்.";
+      }
+    } else if (isProfileEn) {
+      interceptReply = "You can view your profile by clicking your name or the [Profile](/profile) option in the sidebar/navigation menu.";
+    } else if (isProfileTa) {
+      interceptReply = "பக்கவாட்டு மெனுவில் உள்ள [Profile](/profile) என்பதை க்ளிக் செய்வதன் மூலம் உங்கள் சுயவிவரத்தைக் காணலாம்.";
+    } else if (isHistoryEn) {
+      interceptReply = "You can see your game history and rating progression on your [Profile](/profile) page.";
+    } else if (isHistoryTa) {
+      interceptReply = "உங்கள் விளையாட்டு வரலாறு மற்றும் மதிப்பீட்டை உங்கள் [Profile](/profile) பக்கத்தில் பார்க்கலாம்.";
+    } else if (isFamousEn) {
+      interceptReply = "Click on [Famous Games](/games-library) in the sidebar/navigation menu to study historical games played by Chess Grandmasters.";
+    } else if (isFamousTa) {
+      interceptReply = "கிராண்ட்மாஸ்டர்கள் விளையாடிய ஆட்டங்களைப் படிக்க பக்கவாட்டு மெனுவில் உள்ள [Famous Games](/games-library) என்பதை க்ளிக் செய்யவும்.";
+    } else if (isLanguageEn) {
+      interceptReply = "You can change the chatbot language by clicking the 'தமிழ்' / 'ENGLISH' button at the top of the Mantri panel.";
+    } else if (isLanguageTa) {
+      interceptReply = "மந்திரி அரட்டை சாளரத்தின் மேலே உள்ள 'தமிழ்' / 'ENGLISH' பொத்தானை க்ளிக் செய்வதன் மூலம் நீங்கள் மொழியை மாற்றி அமைக்கலாம்.";
+    } else if (isRatingEn) {
+      interceptReply = "Your current ELO rating and progression graph are displayed on your [Dashboard](/dashboard) or [Profile](/profile) page.";
+    } else if (isRatingTa) {
+      interceptReply = "உங்கள் தற்போதைய ELO மதிப்பீடு மற்றும் வரைபடம் உங்கள் [Dashboard](/dashboard) அல்லது [Profile](/profile) பக்கத்தில் காட்டப்படும்.";
+    } else if (isLessonsEn) {
+      interceptReply = "Click on [Lessons](/lessons) in the sidebar/navigation menu to browse and watch our video lessons.";
+    } else if (isLessonsTa) {
+      interceptReply = "வீடியோ பாடங்களைக் காண பக்கவாட்டு மெனுவில் உள்ள [Lessons](/lessons) என்பதை க்ளிக் செய்யவும்.";
+    } else if (isAssessmentEn) {
+      interceptReply = "Go to [Assessment](/assessment) in the sidebar/navigation menu to take your CAT Chess Assessment.";
+    } else if (isAssessmentTa) {
+      interceptReply = "உங்கள் CAT சதுரங்க மதிப்பீட்டுத் தேர்வை எழுத பக்கவாட்டு மெனுவில் உள்ள [Assessment](/assessment) பகுதிக்குச் செல்லவும்.";
+    }
+
+    if (interceptReply) {
+      setTimeout(() => {
+        const replyIdx = messages.length + 1;
+        setMessages(m => [...m, { role: 'bot', text: interceptReply }]);
+        setLoading(false);
+        if (voiceModeRef.current) readAloud(interceptReply, replyIdx);
+      }, 300);
+      return;
+    }
+
     // --- 2. Standard Query Proxy Pipeline ---
     try {
-      const res = await chatbotApi.ask(userText, activeFen, lang);
+      const res = await chatbotApi.ask(userText, activeFen, lang, playerColor);
       const botText = res.reply;
       const botMsgIdx = messages.length + 1;
       setMessages(m => [...m, { role: 'bot', text: botText }]);
@@ -482,7 +615,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
                       : 'bg-navy-mid text-gray-200 border border-[#1E2E52]/40 rounded-bl-sm'
                   }`}
                 >
-                  {m.text}
+                  {renderMessageText(m.text)}
                 </div>
 
                 {/* Read Aloud button — available for BOTH Tamil and English */}
