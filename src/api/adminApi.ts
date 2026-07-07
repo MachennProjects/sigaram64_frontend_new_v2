@@ -109,6 +109,11 @@ export const adminApi = {
     }
     return response.blob();
   },
+
+  /** Decrypt and view organization sub-admin password using super-admin password */
+  async decryptSubAdminCredentials(orgId: string, adminPassword: string): Promise<{ password: string }> {
+    return apiPost(`/api/admin/organizations/${orgId}/decrypt-subadmin`, { adminPassword });
+  },
 };
 
 

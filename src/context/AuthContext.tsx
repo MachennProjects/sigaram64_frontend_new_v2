@@ -130,6 +130,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Detect browser back button (bfcache restoration) or tab focus without token ──
+  useEffect(() => {
+    const checkTokenState = () => {
+      const token = getToken();
+      if (!token && user) {
+        setUser(null);
+        setGames([]);
+      }
+    };
+    window.addEventListener('pageshow', checkTokenState);
+    window.addEventListener('focus', checkTokenState);
+    return () => {
+      window.removeEventListener('pageshow', checkTokenState);
+      window.removeEventListener('focus', checkTokenState);
+    };
+  }, [user]);
+
   // ── Login ─────────────────────────────────────────────────────────────────
   const login = useCallback(async (identifier: string, password: string, isAdmin = false) => {
     let raw: any;

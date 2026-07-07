@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { studentApi } from "../../../api";
 import AddStudentModal from "./AddStudentModal";
 import BulkImportModal from "./BulkImportModal";
+import * as XLSX from "xlsx";
 
 export interface Student {
   id: string;
@@ -49,16 +50,27 @@ export default function StudentList({
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [editModal, setEditModal] = useState<Student | null>(null);
   const [confirmStatusModal, setConfirmStatusModal] = useState<{ student: Student; newStatus: boolean } | null>(null);
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState<Student | null>(null);
   
+  // Security credentials modals
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyAction, setVerifyAction] = useState<'view' | 'download_selected' | 'download_all' | null>(null);
+  const [verifyingStudentId, setVerifyingStudentId] = useState<string | null>(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [decryptedViewCreds, setDecryptedViewCreds] = useState<any | null>(null);
+
   // Edit states
   const [editName, setEditName] = useState("");
   const [editGender, setEditGender] = useState("");
   const [editClass, setEditClass] = useState("");
   const [editRollNo, setEditRollNo] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editContacts, setEditContacts] = useState<string[]>(['']);
   
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [verifyError, setVerifyError] = useState("");
+  const [verifyAttempts, setVerifyAttempts] = useState(0);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -117,7 +129,7 @@ export default function StudentList({
 
   function showToast(msg: string) {
     setToast(msg);
-    setTimeout(() => setToast(""), 3000);
+    setTimeout(() => setToast(""), 4000);
   }
 
   // Edit save
@@ -127,6 +139,7 @@ export default function StudentList({
     try {
       const updates = {
         name: editName.trim(),
+        email: editEmail.trim(),
         gender: editGender || undefined,
         studentClass: editClass || undefined,
         rollNo: editRollNo.trim() || undefined,
@@ -165,12 +178,104 @@ export default function StudentList({
     }
   }
 
+  // Handle permanent deletion
+  async function handleConfirmDelete() {
+    if (!confirmDeleteModal) return;
+    const target = confirmDeleteModal;
+    setConfirmDeleteModal(null);
+    try {
+      await studentApi.deleteStudentPermanent(target.id);
+      setLocalStudents(prev => prev.filter(s => s.id !== target.id));
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.delete(target.id);
+        return next;
+      });
+      showToast(`🗑️ Permanently deleted: ${target.name}`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(err.message || "❌ Failed to delete student");
+    }
+  }
+
+  // Handle admin password verification and decrypt action
+  async function handleVerifySubmit(adminPassword: string) {
+    setVerifyLoading(true);
+    setVerifyError("");
+    try {
+      let targetIds: string[] | undefined = undefined;
+      
+      if (verifyAction === 'view' && verifyingStudentId) {
+        targetIds = [verifyingStudentId];
+      } else if (verifyAction === 'download_selected') {
+        targetIds = Array.from(selected);
+      } else if (verifyAction === 'download_all') {
+        targetIds = localStudents.map(s => s.id);
+      }
+
+      const res = await studentApi.decryptCredentials(adminPassword, targetIds);
+      setShowVerifyModal(false);
+      setVerifyAttempts(0);
+
+      if (verifyAction === 'view') {
+        if (res.length > 0) {
+          setDecryptedViewCreds(res[0]);
+        } else {
+          showToast("❌ Credentials not found");
+        }
+      } else {
+        // Download Excel Flow
+        if (res.length === 0) {
+          showToast("❌ No credentials to download");
+          return;
+        }
+        const rows = res.map(c => ({
+          'Roll No': c.rollNo,
+          'Name': c.name,
+          'Class': c.studentClass,
+          'Email': c.email,
+          'Password': c.password,
+        }));
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [{ wch: 12 }, { wch: 22 }, { wch: 8 }, { wch: 32 }, { wch: 16 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Credentials');
+        const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); 
+        a.href = url; 
+        a.download = `sigaram64_credentials_${new Date().toISOString().split('T')[0]}.xlsx`; 
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("📥 Credentials downloaded successfully!");
+        setSelected(new Set());
+      }
+    } catch (err: any) {
+      const nextCount = verifyAttempts + 1;
+      setVerifyAttempts(nextCount);
+      if (nextCount >= 3) {
+        localStorage.removeItem('sigaram64_token');
+        window.location.href = '/login';
+      } else {
+        setVerifyError(`❌ Incorrect password. ${3 - nextCount} attempt(s) remaining before secure logout.`);
+      }
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
   // Stats helpers
   const totalActive = filtered.filter(s => s.active === true).length;
   const totalInactive = filtered.filter(s => s.active !== true).length;
   const avgElo = filtered.length > 0
     ? Math.round(filtered.reduce((a, s) => a + (s.elo ?? 1000), 0) / filtered.length)
     : 0;
+
+  // Validation checking helper for save button disabling
+  const isPhoneInvalid = editContacts.some(c => c.length > 0 && (c.replace(/\D/g, '').length !== 10 || /\D/.test(c)));
+  const isEmailInvalid = editEmail.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail);
+  const isRollNoInvalid = editRollNo.length > 0 && !/^[a-zA-Z0-9-]+$/.test(editRollNo);
 
   return (
     <div className="w-full">
@@ -184,6 +289,16 @@ export default function StudentList({
       {/* Header Buttons if showAddImportButtons is true */}
       {showAddImportButtons && (
         <div className="flex justify-end gap-2 mb-6 flex-wrap">
+          <button 
+            onClick={() => {
+              setVerifyAction('download_all');
+              setShowVerifyModal(true);
+            }}
+            className="px-4 py-2 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 text-xs rounded-xl font-semibold transition-colors flex items-center gap-1.5"
+            title="Download credentials of all students in organization"
+          >
+            🔑 Download All Credentials
+          </button>
           <button 
             onClick={() => setShowBulkModal(true)} 
             className="px-4 py-2 border border-gold/30 text-gold hover:bg-gold/10 text-xs rounded-xl font-semibold transition-colors"
@@ -253,10 +368,19 @@ export default function StudentList({
         <div className="bg-navy-mid border border-[#1E2E52] rounded-xl px-4 py-3 mb-4 flex items-center gap-4 flex-wrap animate-fadeIn">
           <span className="text-gold text-xs font-bold">{selected.size} selected</span>
           <button
+            onClick={() => {
+              setVerifyAction('download_selected');
+              setShowVerifyModal(true);
+            }}
+            className="text-xs text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1"
+          >
+            🔑 Download Credentials ({selected.size})
+          </button>
+          <button
             onClick={async () => {
               try {
                 for (const id of selected) {
-                  await studentApi.deactivateStudent(id);
+                  await studentApi.updateStudent(id, { active: false });
                 }
                 setLocalStudents(prev =>
                   prev.map(s => selected.has(s.id) ? { ...s, active: false } : s)
@@ -379,23 +503,10 @@ export default function StudentList({
                     </button>
                   </td>
                   <td className="px-4 py-3.5 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => {
-                          setEditModal(s);
-                          setEditName(s.name);
-                          setEditGender(s.gender || "");
-                          setEditClass(s.studentClass || "");
-                          setEditRollNo(s.rollNo || "");
-                          setEditContacts(s.contact && s.contact.length > 0 ? [...s.contact] : ['']);
-                        }}
-                        className="text-gold font-bold hover:underline text-[10px]"
-                      >
-                        Edit
-                      </button>
+                    <div className="flex items-center justify-end">
                       <Link
                         to={`/students/${s.id}`}
-                        className="text-[10px] text-white bg-navy-mid border border-gold/30 px-2.5 py-1 rounded hover:bg-gold hover:text-navy transition-colors font-bold"
+                        className="text-[10px] text-white bg-navy-mid border border-gold/30 px-3 py-1 rounded-xl hover:bg-gold hover:text-navy transition-colors font-bold"
                       >
                         View
                       </Link>
@@ -437,6 +548,7 @@ export default function StudentList({
           <div className="w-full max-w-md bg-[#0B1628] border border-[#1E2E52] rounded-2xl p-6 shadow-2xl space-y-4 animate-slideUp">
             <h3 className="text-white font-bold text-base">Edit Student Profile</h3>
             <div className="space-y-3">
+              
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Student Name</label>
                 <input
@@ -445,6 +557,22 @@ export default function StudentList({
                   onChange={e => setEditName(e.target.value)}
                   className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Student Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  className={`w-full bg-[#12234A] border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold ${
+                    isEmailInvalid ? 'border-red-500/60' : 'border-[#1E2E52]'
+                  }`}
+                  placeholder="student@sigaram64.com"
+                />
+                {isEmailInvalid && (
+                  <p className="text-red-400 text-[10px] mt-0.5 font-semibold">⚠️ Invalid email address format</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -482,28 +610,42 @@ export default function StudentList({
                   type="text"
                   value={editRollNo}
                   onChange={e => setEditRollNo(e.target.value)}
-                  className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold"
+                  className={`w-full bg-[#12234A] border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold ${
+                    isRollNoInvalid ? 'border-red-500/60' : 'border-[#1E2E52]'
+                  }`}
+                  placeholder="e.g. R001"
                 />
+                {isRollNoInvalid && (
+                  <p className="text-red-400 text-[10px] mt-0.5 font-semibold">⚠️ Only alphanumeric characters and hyphens (-) allowed</p>
+                )}
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Contacts (1 or 2, slash-separated or list)</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Contacts (1 or 2)</label>
                 {editContacts.map((c, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      value={c}
-                      onChange={e => setEditContacts(prev => prev.map((val, i) => i === idx ? e.target.value : val))}
-                      className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold flex-1"
-                    />
-                    {editContacts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setEditContacts(prev => prev.filter((_, i) => i !== idx))}
-                        className="text-red-500 hover:text-red-400 text-xs px-1"
-                      >
-                        ✕
-                      </button>
+                  <div key={idx} className="space-y-1">
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={c}
+                        onChange={e => setEditContacts(prev => prev.map((val, i) => i === idx ? e.target.value : val))}
+                        className={`w-full bg-[#12234A] border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold flex-1 ${
+                          c.length > 0 && (c.replace(/\D/g, '').length !== 10 || /\D/.test(c)) ? 'border-red-500/60' : 'border-[#1E2E52]'
+                        }`}
+                        placeholder={`Phone ${idx + 1}`}
+                      />
+                      {editContacts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditContacts(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-red-500 hover:text-red-400 text-xs px-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {c.length > 0 && (c.replace(/\D/g, '').length !== 10 || /\D/.test(c)) && (
+                      <p className="text-red-400 text-[10px] mt-0.5 font-semibold">⚠️ Must be exactly 10 digits</p>
                     )}
                   </div>
                 ))}
@@ -518,6 +660,7 @@ export default function StudentList({
                 )}
               </div>
             </div>
+            
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => setEditModal(null)}
@@ -527,8 +670,8 @@ export default function StudentList({
               </button>
               <button
                 onClick={handleSaveEdit}
-                disabled={saving}
-                className="flex-1 py-2.5 btn-gold font-bold rounded-xl text-xs"
+                disabled={saving || isPhoneInvalid || isEmailInvalid || isRollNoInvalid}
+                className="flex-1 py-2.5 btn-gold font-bold rounded-xl text-xs disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save Changes"}
               </button>
@@ -557,7 +700,6 @@ export default function StudentList({
         <BulkImportModal
           onClose={() => setShowBulkModal(false)}
           onSuccess={() => {
-            setShowBulkModal(false);
             onRefresh();
             showToast("✅ Students imported successfully!");
           }}
@@ -597,6 +739,178 @@ export default function StudentList({
           </div>
         </div>
       )}
+
+      {/* Permanent Deletion Confirmation Modal */}
+      {confirmDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md bg-[#0B1628] border border-red-500/40 rounded-2xl p-6 shadow-2xl space-y-4 animate-slideUp select-none">
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <span className="text-red-500 text-3xl font-bold">⚠️</span>
+              </div>
+              <h3 className="text-red-400 font-bold text-lg">⚠️ Severe Permanent Deletion</h3>
+              <div className="text-left bg-red-950/10 border border-red-900/30 rounded-xl p-4 mt-3 text-xs text-red-200 leading-relaxed space-y-2">
+                <p>You are about to permanently delete student <strong className="font-bold text-white font-mono">"{confirmDeleteModal.name}"</strong> (Roll No: {confirmDeleteModal.rollNo || '—'}).</p>
+                <p className="font-semibold text-red-300">This action will permanently purge:</p>
+                <ul className="list-disc pl-5 space-y-1 font-mono text-[10px]">
+                  <li>Their login account & profile details</li>
+                  <li>Learning dashboard progress, peaks, & ELO ratings</li>
+                  <li>XP, levels, and earned milestones / badges</li>
+                </ul>
+                <p className="text-[10px] text-gray-500 font-medium border-t border-red-900/20 pt-2 mt-2">
+                  * Note: Their chess games history is preserved securely under admin logs for performance analytics.
+                </p>
+              </div>
+              <p className="text-white text-xs font-bold mt-4">THIS ACTION CANNOT BE UNDONE. Confirm to delete.</p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setConfirmDeleteModal(null)}
+                className="flex-1 py-2.5 bg-[#32312F] text-gray-300 font-bold rounded-xl text-xs hover:bg-[#403F3C] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs transition-colors shadow-lg"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Password Verification Modal */}
+      {showVerifyModal && (
+        <AdminPasswordVerifyModal
+          loading={verifyLoading}
+          error={verifyError}
+          onClose={() => {
+            setShowVerifyModal(false);
+            setVerifyAction(null);
+            setVerifyingStudentId(null);
+            setVerifyError("");
+            setVerifyAttempts(0);
+          }}
+          onSubmit={handleVerifySubmit}
+        />
+      )}
+
+      {/* Decrypted Credentials View Modal */}
+      {decryptedViewCreds && (
+        <DecryptedCredentialsViewModal
+          credentials={decryptedViewCreds}
+          onClose={() => setDecryptedViewCreds(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Inner Secure Verification Modal ───
+interface VerifyModalProps {
+  onClose: () => void;
+  onSubmit: (password: string) => void;
+  loading: boolean;
+  error?: string;
+}
+function AdminPasswordVerifyModal({ onClose, onSubmit, loading, error }: VerifyModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim()) return;
+    onSubmit(password);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-xs px-4" onClick={onClose}>
+      <div 
+        className="w-full max-w-sm bg-[#0D1B33] border border-[#1E2E52] rounded-2xl p-6 shadow-2xl animate-slideUp space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="text-center space-y-1">
+          <span className="text-2xl">🔐</span>
+          <h4 className="text-white font-bold text-sm">Security Verification</h4>
+          <p className="text-gray-500 text-[10px]">Please enter your admin login password to authorize this action.</p>
+        </div>
+        {error && (
+          <div className="bg-red-950/20 border border-red-800/30 text-red-400 p-2.5 rounded-xl text-[10px] font-semibold text-center animate-fadeIn">
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <input
+              type={showPass ? "text" : "password"}
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your admin password"
+              className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gold pr-10"
+              autoFocus
+            />
+            <button type="button" onClick={() => setShowPass(p => !p)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs">
+              {showPass ? '🙈' : '👁'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 bg-[#32312F] text-gray-300 font-bold rounded-xl text-xs hover:bg-[#403F3C]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !password.trim()}
+              className="flex-1 py-2 btn-gold font-bold rounded-xl text-xs disabled:opacity-50"
+            >
+              {loading ? "Verifying…" : "Verify"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Inner Decrypted Credentials View Modal ───
+interface ViewCredsModalProps {
+  onClose: () => void;
+  credentials: { name: string; email: string; rollNo: string; password: string };
+}
+function DecryptedCredentialsViewModal({ onClose, credentials }: ViewCredsModalProps) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-xs px-4" onClick={onClose}>
+      <div 
+        className="w-full max-w-sm bg-[#0D1B33] border border-green-800/40 rounded-2xl p-6 shadow-2xl animate-slideUp space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="text-center space-y-1">
+          <span className="text-2xl">🔑</span>
+          <h4 className="text-white font-bold text-sm">Decrypted Credentials</h4>
+          <p className="text-gray-500 text-[10px] font-mono">Active Student: {credentials.name}</p>
+        </div>
+        <div className="bg-[#0B1628] border border-green-800/20 rounded-xl p-4 space-y-2 select-text text-xs leading-relaxed">
+          <p className="flex justify-between items-center"><span className="text-gray-500 font-semibold">Roll No:</span> <span className="text-white font-bold select-all">{credentials.rollNo}</span></p>
+          <p className="flex justify-between items-center"><span className="text-gray-500 font-semibold">Email:</span> <span className="text-blue-300 font-mono font-bold select-all">{credentials.email}</span></p>
+          <p className="flex justify-between items-center"><span className="text-gray-500 font-semibold">Password:</span> <span className="text-green-300 font-mono font-bold select-all">{credentials.password}</span></p>
+        </div>
+        <div className="bg-yellow-900/10 border border-yellow-700/20 text-yellow-400 rounded-xl p-3 text-[10px] leading-relaxed">
+          ⚠️ Treat this information as highly confidential. Close the popup to clear active decryption caches.
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full btn-gold py-2.5 font-bold rounded-xl text-xs"
+        >
+          Done
+        </button>
+      </div>
     </div>
   );
 }

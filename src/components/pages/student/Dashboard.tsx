@@ -122,7 +122,7 @@ export default function StudentDashboard() {
     { icon: "🧩", label: "Daily Puzzle", path: "#", badge: "🔒 Locked" },
     { icon: "🧠", label: "Assessment", path: "/assessment", badge: quizResult?.quizCompleted ? "✅ Done" : "New" },
     { icon: "📚", label: "Learn", path: "/lessons", badge: null },
-    { icon: "🏆", label: "Games Library", path: "/famous-games", badge: null },
+    { icon: "🏆", label: "Games Library", path: "/games-library", badge: null },
     { icon: "📋", label: "PGN Viewer", path: "/pgn-load", badge: null },
     { icon: "👤", label: "My Profile", path: "/profile", badge: null },
   ];
@@ -340,7 +340,7 @@ export default function StudentDashboard() {
                 🏆 Famous Games
               </h3>
               <button
-                onClick={() => navigate('/famous-games')}
+                onClick={() => navigate('/games-library')}
                 className="text-gold text-sm font-semibold hover:underline"
               >See All →</button>
             </div>

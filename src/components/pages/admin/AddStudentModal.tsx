@@ -118,11 +118,10 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
       };
       const res: any = await authApi.signup(payload);
       setCreatedCreds({
-        email: res.user?.email || payload.email || '',
+        email: res.user?.email || payload.email || email || '',
         password: res.generatedPassword || payload.password || '(auto-generated)',
       });
       setSuccessMsg(`✅ Student "${name}" created successfully!`);
-      setTimeout(() => onSuccess(), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to create student');
     } finally {
@@ -151,24 +150,35 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
               {isSubAdmin ? `Org: ${orgName}` : 'All fields filled here — student logs in directly'}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
+          <button onClick={successMsg ? onSuccess : onClose} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
         </div>
 
         {/* Body */}
         <div className="px-6 py-5 max-h-[78vh] overflow-y-auto">
           {error      && <div className="bg-red-950/20 border border-red-800/30 text-red-400 p-3 rounded-xl text-xs mb-4">{error}</div>}
-          {successMsg && (
-            <div className="bg-green-950/20 border border-green-800/30 text-green-400 p-4 rounded-xl text-xs mb-4 space-y-1">
-              <div>{successMsg}</div>
-              {createdCreds && (
-                <div className="mt-2 bg-[#0B1628] border border-green-800/20 rounded-lg p-3 space-y-1">
-                  <p className="text-[10px] text-gray-400 uppercase font-bold">Login Credentials</p>
-                  <p><span className="text-gray-400">Email:</span> <span className="text-white font-mono">{createdCreds.email}</span></p>
-                  <p><span className="text-gray-400">Password:</span> <span className="text-white font-mono">{createdCreds.password}</span></p>
+          
+          {successMsg ? (
+            <div className="space-y-4">
+              <div className="bg-green-950/20 border border-green-800/30 text-green-400 p-5 rounded-2xl text-xs space-y-3">
+                <p className="text-sm font-bold">{successMsg}</p>
+                <div className="bg-[#0B1628] border border-green-800/20 rounded-xl p-4 space-y-2 select-text">
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Student Credentials</p>
+                  <div className="h-px bg-green-800/20 my-1" />
+                  <p className="flex justify-between items-center"><span className="text-gray-500 font-semibold">Email:</span> <span className="text-white font-mono font-bold select-all">{createdCreds?.email}</span></p>
+                  <p className="flex justify-between items-center"><span className="text-gray-500 font-semibold">Password:</span> <span className="text-white font-mono font-bold select-all">{createdCreds?.password}</span></p>
                 </div>
-              )}
+                <div className="bg-yellow-900/10 border border-yellow-700/20 text-yellow-400 rounded-xl p-3 text-[10px] mt-3">
+                  ⚠️ Save these credentials now. Passwords are encrypted for safety and will require verification to see again.
+                </div>
+              </div>
+              <button
+                onClick={onSuccess}
+                className="w-full btn-gold py-3 text-xs font-bold transition-all"
+              >
+                Close & Refresh
+              </button>
             </div>
-          )}
+          ) : (
 
           <form onSubmit={handleSubmit} className="space-y-4">
 
@@ -205,6 +215,9 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
                 <label className={labelCls}>Roll No <span className="text-gray-600 normal-case">(optional)</span></label>
                 <input type="text" value={rollNo} onChange={e => setRollNo(e.target.value)}
                   placeholder="e.g. R001" className={inputCls} />
+                {rollNo.length > 0 && !/^[a-zA-Z0-9-]+$/.test(rollNo) && (
+                  <p className="text-red-400 text-[10px] mt-1 font-semibold">⚠️ Only alphanumeric characters and hyphens (-) allowed</p>
+                )}
               </div>
             </div>
 
@@ -218,13 +231,18 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
                 )}
               </div>
               {contacts.map((c, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input type="tel" value={c} onChange={e => setContact(i, e.target.value)}
-                    placeholder={`Phone ${i + 1}`}
-                    className={inputCls + " flex-1"} />
-                  {contacts.length > 1 && (
-                    <button type="button" onClick={() => removeContact(i)}
-                      className="text-red-500 hover:text-red-400 text-sm font-bold px-1">✕</button>
+                <div key={i} className="space-y-1">
+                  <div className="flex gap-2 items-center">
+                    <input type="tel" value={c} onChange={e => setContact(i, e.target.value)}
+                      placeholder={`Phone ${i + 1}`}
+                      className={inputCls + " flex-1"} />
+                    {contacts.length > 1 && (
+                      <button type="button" onClick={() => removeContact(i)}
+                        className="text-red-500 hover:text-red-400 text-sm font-bold px-1">✕</button>
+                    )}
+                  </div>
+                  {c.length > 0 && (c.replace(/\D/g, '').length !== 10 || /\D/.test(c)) && (
+                    <p className="text-red-400 text-[10px] mt-0.5 font-semibold">⚠️ Phone number must be exactly 10 digits</p>
                   )}
                 </div>
               ))}
@@ -249,6 +267,9 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
                 placeholder="Leave blank to auto-generate on save"
                 className={`${inputCls} ${emailStatus === 'taken' ? 'border-red-500/60' : emailStatus === 'ok' ? 'border-green-500/60' : ''}`}
               />
+              {email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+                <p className="text-red-400 text-[10px] mt-1 font-semibold">⚠️ Invalid email address format</p>
+              )}
             </div>
 
             {/* Password */}
@@ -293,11 +314,21 @@ export default function AddStudentModal({ onClose, onSuccess, preselectedOrgId, 
               </div>
             )}
 
-            <button type="submit" disabled={loading || emailStatus === 'taken'}
-              className="w-full btn-gold py-3 text-xs font-bold shadow-md transition-all active:scale-98 disabled:opacity-50">
+            <button 
+              type="submit" 
+              disabled={
+                loading || 
+                emailStatus === 'taken' ||
+                (email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ||
+                (rollNo.length > 0 && !/^[a-zA-Z0-9-]+$/.test(rollNo)) ||
+                contacts.some(c => c.length > 0 && (c.replace(/\D/g, '').length !== 10 || /\D/.test(c)))
+              }
+              className="w-full btn-gold py-3 text-xs font-bold shadow-md transition-all active:scale-98 disabled:opacity-50"
+            >
               {loading ? 'Creating Student…' : '✓ Create Student'}
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>,

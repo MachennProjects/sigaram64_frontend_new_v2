@@ -1,10 +1,9 @@
-// SIGARAM64 — BootcampActivity
-// 7-day game activity tracker for sub_admin (school-scoped) or super_admin (org-scoped)
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../../../api';
 
 export default function BootcampActivity() {
+  const navigate        = useNavigate();
   const [searchParams]  = useSearchParams();
   const orgId           = searchParams.get('orgId') || undefined;
 
@@ -25,7 +24,7 @@ export default function BootcampActivity() {
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-gold/30 border-t-gold rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading bootcamp activity…</p>
+          <p className="text-gray-500 text-sm">Loading activity data…</p>
         </div>
       </div>
     );
@@ -66,11 +65,20 @@ export default function BootcampActivity() {
       <div className="max-w-5xl mx-auto space-y-6">
 
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-white">📍 Bootcamp Activity</h1>
-          <p className="text-gray-500 text-xs mt-1">
-            Game activity for the last 7 days · {stats.totalStudents || 0} students
-          </p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-full bg-navy-mid flex items-center justify-center text-gray-400 hover:text-white hover:bg-navy transition-colors font-bold text-sm flex-shrink-0"
+            title="Go Back"
+          >
+            ←
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-white">📍 Organization Activity</h1>
+            <p className="text-gray-500 text-xs mt-1">
+              Game activity for the last 7 days · {stats.totalStudents || 0} students
+            </p>
+          </div>
         </div>
 
         {/* Stats row */}

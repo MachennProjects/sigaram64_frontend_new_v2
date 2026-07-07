@@ -23,7 +23,7 @@ export default function VideoLessonPlayer() {
     <div className="bg-dark-bg min-h-screen flex flex-col font-sans">
       {/* ── Header ── */}
       {!isDeepView && (
-        <div className="px-6 pt-8 pb-6 border-b border-divider sticky top-0 bg-dark-bg/90 backdrop-blur z-20">
+        <div className="px-4 sm:px-6 pt-6 sm:pt-8 pb-4 sm:pb-6 border-b border-divider sticky top-0 bg-dark-bg/90 backdrop-blur z-20">
           
           {/* Tab Navigation */}
           <div className="flex items-center gap-4 border-b border-divider pb-[-1px]">
@@ -52,7 +52,7 @@ export default function VideoLessonPlayer() {
       )}
 
       {/* ── Content Area ── */}
-      <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {activeTab === "interactive" ? (
           <InteractiveLearnTab />
         ) : (

@@ -94,10 +94,10 @@ export default function VideoLessonsTab() {
           <span className="text-lg">←</span> Back to Library
         </button>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 flex flex-col lg:flex-row gap-6 w-full">
           {/* Main Video Area */}
-          <div className="flex-1 flex flex-col gap-4">
-            <div className="bg-black rounded-2xl overflow-hidden shadow-2xl relative" style={{ aspectRatio: "16/9" }}>
+          <div className="w-full lg:flex-1 flex flex-col gap-4">
+            <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl relative" style={{ aspectRatio: "16/9" }}>
               <iframe
                 src={getDriveEmbedUrl(activeLesson.youtubeUrl)}
                 allow="autoplay; encrypted-media; fullscreen"
@@ -150,7 +150,7 @@ export default function VideoLessonsTab() {
           </div>
 
           {/* Up Next Sidebar */}
-          <div className="lg:w-80 flex flex-col gap-4">
+          <div className="w-full lg:w-80 flex flex-col gap-4">
             <h3 className="text-white font-semibold px-1">More Lessons</h3>
             <div className="flex flex-col gap-3">
               {lessons.filter((l) => l.id !== activeLesson.id).map((lesson) => {

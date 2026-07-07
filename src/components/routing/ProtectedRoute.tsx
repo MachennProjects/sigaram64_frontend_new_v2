@@ -3,13 +3,20 @@
 // Waits for auth state to resolve before deciding (prevents flash on refresh)
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getToken } from '../../api/client';
 import logoIcon from '../../assets/Images/Logo/sigaram64_icon_transparent_512.png';
 import { ROLE_HOME } from '../../config/roleConfig';
 import type { UserRole } from '../../data/users';
 
 export default function ProtectedRoute({ allowedRoles }: { allowedRoles?: UserRole[] }) {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const location = useLocation();
+
+  // Detect browser back button (bfcache restoration) where token is cleared but memory state is stale
+  if (isAuthenticated && !getToken()) {
+    logout();
+    return <Navigate to="/login" replace />;
+  }
 
   // While auth state is being resolved — show a minimal spinner
   // This prevents a flash-redirect to /login on page refresh

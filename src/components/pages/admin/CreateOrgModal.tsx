@@ -31,6 +31,8 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
   const [address,  setAddress]  = useState(editOrg?.address  || '');
   const [password, setPassword] = useState('');
   const [confirm,  setConfirm]  = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
 
@@ -107,6 +109,9 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
                 placeholder="admin@school.com"
                 className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600"
               />
+              {email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+                <p className="text-red-400 text-[10px] mt-1 font-semibold">⚠️ Invalid email address format</p>
+              )}
             </div>
           )}
 
@@ -120,6 +125,9 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
                 placeholder="+91 99999 00000"
                 className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600"
               />
+              {phone.length > 0 && (phone.replace(/\D/g, '').length !== 10 || /\D/.test(phone)) && (
+                <p className="text-red-400 text-[10px] mt-1 font-semibold">⚠️ Must be exactly 10 digits</p>
+              )}
             </div>
             <div>
               <label className="block text-gray-400 text-[11px] font-bold mb-1.5 uppercase tracking-wider">District *</label>
@@ -148,25 +156,37 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
           {/* Password fields — only shown when creating */}
           {!isEdit && (
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="space-y-1">
                 <label className="block text-gray-400 text-[11px] font-bold mb-1.5 uppercase tracking-wider">Password *</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600"
-                />
+                <div className="relative">
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Min 6 characters"
+                    className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600 pr-10"
+                  />
+                  <button type="button" onClick={() => setShowPass(p => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs">
+                    {showPass ? '🙈' : '👁'}
+                  </button>
+                </div>
               </div>
-              <div>
+              <div className="space-y-1">
                 <label className="block text-gray-400 text-[11px] font-bold mb-1.5 uppercase tracking-wider">Confirm *</label>
-                <input
-                  type="password"
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
-                  placeholder="Re-enter password"
-                  className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirm ? 'text' : 'password'}
+                    value={confirm}
+                    onChange={e => setConfirm(e.target.value)}
+                    placeholder="Re-enter password"
+                    className="w-full bg-[#12234A] border border-[#1E2E52] rounded-xl px-4 py-2.5 text-white text-sm focus:border-gold/50 focus:outline-none placeholder-gray-600 pr-10"
+                  />
+                  <button type="button" onClick={() => setShowConfirm(p => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs">
+                    {showConfirm ? '🙈' : '👁'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -188,7 +208,11 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={
+                loading ||
+                (phone.length > 0 && (phone.replace(/\D/g, '').length !== 10 || /\D/.test(phone))) ||
+                (!isEdit && email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+              }
               className="flex-1 py-2.5 rounded-xl bg-gold text-navy font-bold text-sm hover:bg-yellow-400 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Saving…' : isEdit ? 'Save Changes' : '🏢 Create Organization'}

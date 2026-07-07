@@ -37,22 +37,18 @@ export const studentApi = {
     await apiDelete(`/api/students/${id}`);
   },
 
-  /** Bulk import students from Excel file */
-  async bulkImport(file: File, orgId?: string): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (orgId) {
-      formData.append('orgId', orgId);
-    }
-    
-    // Using fetch directly or custom request setup for multipart/form-data
+  /** Bulk import students from JSON array */
+  async bulkImport(students: Record<string, string>[], orgId?: string): Promise<any> {
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
     const token = localStorage.getItem('sigaram64_token');
     
     const response = await fetch(`${API_URL}/api/students/bulk-import`, {
       method: 'POST',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ students, orgId })
     });
     
     const json = await response.json();
@@ -108,5 +104,20 @@ export const studentApi = {
       total:   meta?.total   ?? 0,
       hasMore: meta?.hasMore ?? false,
     };
+  },
+
+  /** Permanently delete a student and clean their progress history */
+  async deleteStudentPermanent(id: string): Promise<void> {
+    await apiDelete(`/api/students/${id}`);
+  },
+
+  /** Decrypt credentials of students using admin verification password */
+  async decryptCredentials(adminPassword: string, studentIds?: string[]): Promise<any[]> {
+    return apiPost('/api/students/decrypt-credentials', { adminPassword, studentIds });
+  },
+
+  /** Get game logs of deleted students for admin dashboard */
+  async getDeletedStudentsGames(): Promise<any[]> {
+    return apiGet('/api/students/deleted-games');
   },
 };
