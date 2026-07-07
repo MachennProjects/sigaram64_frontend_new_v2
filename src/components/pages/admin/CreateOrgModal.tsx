@@ -62,7 +62,7 @@ export default function CreateOrgModal({ onClose, onSuccess, editOrg }: Props) {
   };
 
   const modal = (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div
         className="bg-[#0D1B33] border border-[#1E2E52] rounded-2xl w-full max-w-lg shadow-2xl animate-fadeIn"
         onClick={e => e.stopPropagation()}
