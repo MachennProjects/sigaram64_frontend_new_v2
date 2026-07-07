@@ -66,7 +66,17 @@ async function request<T>(
   if (response.status === 401) {
     clearToken();
     const isAuthPath = path.includes('/api/auth/login') || path.includes('/api/auth/admin/login');
-    if (!isAuthPath && window.location.pathname !== '/login') {
+    if (isAuthPath) {
+      // On login endpoints, read the real error from the server (e.g. "Invalid credentials")
+      const errJson = await response.json().catch(() => ({}));
+      throw new ApiError(
+        errJson.error || errJson.message || 'Invalid email or password.',
+        401,
+        errJson
+      );
+    }
+    // On protected routes, session has expired — redirect to login
+    if (window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
     throw new ApiError('Session expired. Please login again.', 401);
