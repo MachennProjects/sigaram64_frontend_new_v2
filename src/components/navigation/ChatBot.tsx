@@ -415,9 +415,8 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       return;
     }
 
-    // --- 1.2 Client-Side Navigation Questions Interception ---
     const lowerText = userText.toLowerCase().trim();
-    
+
     // English Checks
     const isPlayGameEn    = lowerText.includes('where can i play') || lowerText.includes('play game') || lowerText.includes('how to play game') || lowerText === 'where can i play a game?';
     const isProfileEn     = lowerText.includes('where is my profile') || lowerText.includes('profile page') || lowerText.includes('profile option') || lowerText === 'where is my profile page?';
@@ -427,6 +426,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     const isRatingEn      = lowerText.includes('where can i see my chess elo') || lowerText.includes('see my elo') || lowerText.includes('my rating') || lowerText.includes('elo rating') || lowerText === 'where can i see my chess elo rating?';
     const isLessonsEn     = lowerText.includes('where can i watch chess video lessons') || lowerText.includes('watch lessons') || lowerText.includes('video lessons') || lowerText === 'where can i watch chess video lessons?';
     const isAssessmentEn  = lowerText.includes('where can i take my chess assessment') || lowerText.includes('take my assessment') || lowerText.includes('chess assessment') || lowerText === 'where can i take my chess assessment?';
+    const isExplainPageEn = lowerText.includes('explain this page') || lowerText.includes('explain page') || lowerText === 'explain this page' || lowerText === 'explain this page?';
 
     // Tamil Checks
     const isPlayGameTa    = lowerText.includes('நான் எங்கு கேம் விளையாடலாம்') || lowerText.includes('விளையாடலாம்') || lowerText.includes('கேம் விளையாட') || lowerText === 'நான் எங்கு கேம் விளையாடலாம்?';
@@ -437,6 +437,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     const isRatingTa      = lowerText.includes('எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்') || lowerText.includes('elo மதிப்பீடு') || lowerText.includes('மதிப்பீட்டை எங்கே') || lowerText === 'எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்?';
     const isLessonsTa     = lowerText.includes('நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்') || lowerText.includes('வீடியோ பாடங்கள்') || lowerText.includes('பாடங்களை பார்க்க') || lowerText === 'நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்?';
     const isAssessmentTa  = lowerText.includes('நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்') || lowerText.includes('மதிப்பீட்டுத் தேர்வு') || lowerText.includes('தேர்வு எழுத') || lowerText === 'நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்?';
+    const isExplainPageTa = lowerText.includes('இந்தப் பக்கத்தை விளக்கு') || lowerText.includes('பக்கத்தை விளக்கு') || lowerText === 'இந்தப் பக்கத்தை விளக்கு?';
 
     const isMobile = window.innerWidth < 1024;
     let interceptReply = '';
@@ -481,6 +482,43 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       interceptReply = "Go to [Assessment](/assessment) in the sidebar/navigation menu to take your CAT Chess Assessment.";
     } else if (isAssessmentTa) {
       interceptReply = "உங்கள் CAT சதுரங்க மதிப்பீட்டுத் தேர்வை எழுத பக்கவாட்டு மெனுவில் உள்ள [Assessment](/assessment) பகுதிக்குச் செல்லவும்.";
+    } else if (isExplainPageEn || isExplainPageTa) {
+      const path = window.location.pathname;
+      const isTa = lang === 'ta' || isExplainPageTa;
+
+      if (path === '/dashboard' || path === '/home') {
+        interceptReply = isTa
+          ? "உங்கள் **Dashboard**-க்கு வரவேற்கிறோம்! இங்கே நீங்கள் காணலாம்:\n- உங்கள் ELO மதிப்பீடு மற்றும் முன்னேற்ற வரைபடம்.\n- உங்கள் மொத்த XP புள்ளிகள்.\n- நீங்கள் விளையாடிய ஆட்டங்களின் சுருக்கம்.\n- விளையாடத் தொடங்க [Play Hub](/play) அல்லது கற்க [Lessons](/lessons) என்பதை க்ளிக் செய்யவும்."
+          : "Welcome to your **Dashboard**! Here you can see:\n- Your chess ELO rating and rating progression chart.\n- Your total XP (Experience Points).\n- A summary of all chess games you have played.\n- Click [Play Hub](/play) to start playing or [Lessons](/lessons) to learn.";
+      } else if (path === '/play') {
+        interceptReply = isTa
+          ? "**Play Hub**-க்கு வரவேற்கிறோம்! இங்கே நீங்கள் சதுரங்கம் விளையாடலாம்:\n- **Play with AI**: பல்வேறு நிலைகளில் Sigaram AI-க்கு எதிராக விளையாடுங்கள்.\n- **Local/Custom Games**: தனிப்பயன் விதிகளுடன் விளையாடுங்கள் அல்லது பயிற்சி செய்யுங்கள்."
+          : "Welcome to the **Play Hub**! This is where you play chess:\n- **Play with AI**: Play a game against Sigaram AI at different difficulty levels.\n- **Local/Custom Games**: Play with custom rules or practice specific positions.";
+      } else if (path === '/play/ai') {
+        interceptReply = isTa
+          ? "நீங்கள் **Play with AI** பக்கத்தில் உள்ளீர்கள்!\n- உங்களுக்கு விருப்பமான ELO அளவில் கணினிக்கு எதிராக விளையாடலாம்.\n- தற்போதைய ஆட்டத்தைப் பற்றி என்னிடம் (மந்திரி) பேச வலது பக்கத்தில் உள்ள அரட்டைப் பலகையைப் பயன்படுத்தவும்!\n- மீண்டும் செல்ல [Play Hub](/play) ஐ க்ளிக் செய்யவும்."
+          : "You are on the **Play with AI** page!\n- You can play against the engine at your preferred ELO level.\n- Use the chat panel on the right to talk to me (Mantri) about the active game!\n- Click [Play Hub](/play) to go back.";
+      } else if (path === '/games-library') {
+        interceptReply = isTa
+          ? "**Famous Games Library**-க்கு வரவேற்கிறோம்!\n- இங்கே நீங்கள் சதுரங்க கிராண்ட்மாஸ்டர்கள் (Bobby Fischer, விஸ்வநாதன் ஆனந்த் போன்றவர்கள்) விளையாடிய புகழ்பெற்ற ஆட்டங்களை ஆராயலாம்.\n- அவர்களின் உத்திகளைப் பகுப்பாய்வு செய்ய ஆட்டங்களை படிப்படியாக நகர்த்திப் பாருங்கள்."
+          : "Welcome to the **Famous Games Library**!\n- Here you can study historical masterpieces played by Chess Grandmasters (like Garry Kasparov, Bobby Fischer, and Viswanathan Anand).\n- Move through the games step-by-step to analyze their tactics.";
+      } else if (path === '/profile') {
+        interceptReply = isTa
+          ? "உங்கள் **Profile** பக்கத்திற்கு வரவேற்கிறோம்! இங்கே நீங்கள்:\n- உங்கள் தனிப்பட்ட விவரங்கள் மற்றும் கணக்கு நிலையைத் தெரிந்துகொள்ளலாம்.\n- உங்கள் ELO மதிப்பீடு மற்றும் முழு விளையாட்டு வரலாற்றைக் காணலாம்.\n- உங்கள் மதிப்பீட்டு விலகல் மற்றும் செயல்திறன் புள்ளிவிவரங்களை பகுப்பாய்வு செய்யலாம்."
+          : "Welcome to your **Profile** page! Here you can:\n- View your personal details and account status.\n- See your ELO rating and complete game history.\n- Analyze your rating deviation and performance stats.";
+      } else if (path === '/assessment') {
+        interceptReply = isTa
+          ? "**CAT Chess Assessment**-க்கு வரவேற்கிறோம்!\n- இது உங்கள் சதுரங்க உத்திகள் மற்றும் தந்திரோபாய அறிவைச் சோதிக்கும் ஒரு மதிப்பீட்டுத் தேர்வாகும்.\n- இதில் உங்கள் செயல்பாடு உங்கள் தொடக்க மதிப்பீட்டு அளவை நிர்ணயிக்கும்.\n- நகர்வைத் தேர்ந்தெடுப்பதற்கு முன் கவனமாகக் கணக்கிட்டு விளையாடுங்கள்!"
+          : "Welcome to the **CAT Chess Assessment**!\n- This is a formal evaluation to test your tactical and strategic chess knowledge.\n- Your performance here will set or adjust your starting rating level.\n- Make sure to take your time and calculate carefully before choosing a move!";
+      } else if (path === '/lessons') {
+        interceptReply = isTa
+          ? "**Lessons**-க்கு வரவேற்கிறோம்!\n- சதுரங்க விதிகள், திறப்புகள், நடு ஆட்ட உத்திகள் மற்றும் இறுதி ஆட்டங்களை விளக்கும் வீடியோ பாடங்களைக் கண்டு கற்றுக்கொள்ளுங்கள்.\n- வீடியோவை இடைநிறுத்தி, பயிற்சி செய்ய உங்கள் சொந்த போர்டில் நகர்வுகளை முயற்சித்துப் பாருங்கள்."
+          : "Welcome to **Lessons**!\n- Browse and watch video tutorials explaining chess rules, opening strategies, middlegame planning, and endgames.\n- Pause and try out the positions on your own board to practice.";
+      } else {
+        interceptReply = isTa
+          ? "நீங்கள் தற்போது சிகரம்64 தளத்தில் உலாவி வருகிறீர்கள். பக்கவாட்டு மெனுவைப் பயன்படுத்தி பல்வேறு பக்கங்களுக்குச் செல்லலாம்."
+          : "You are currently browsing the Sigaram64 platform. Use the sidebar/navigation menu to visit different pages.";
+      }
     }
 
     if (interceptReply) {
@@ -525,18 +563,32 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
   }
 
   const renderedSuggestions = (() => {
+    const list = [...suggestions];
+
+    // 1. Explain current board position if chess board FEN is active
     const activeFen = (window as any).currentChessBoardFen;
-    if (!activeFen) return suggestions;
-
-    const boardQuestion = lang === 'ta'
-      ? '🔍 எனது தற்போதைய போர்டு நிலையை விளக்கு'
-      : '🔍 Explain my current board position';
-
-    if (suggestions.includes(boardQuestion) || suggestions.some(s => s.includes('board position') || s.includes('போர்டு நிலையை'))) {
-      return suggestions;
+    if (activeFen) {
+      const boardQuestion = lang === 'ta'
+        ? '🔍 எனது தற்போதைய போர்டு நிலையை விளக்கு'
+        : '🔍 Explain my current board position';
+      if (!list.includes(boardQuestion) && !list.some(s => s.includes('board position') || s.includes('போர்டு நிலையை'))) {
+        list.unshift(boardQuestion);
+      }
     }
 
-    return [boardQuestion, ...suggestions];
+    // 2. Explain this page suggestion (available on all student routing paths)
+    const currentPath = window.location.pathname;
+    const supportedPaths = ['/dashboard', '/home', '/play', '/play/ai', '/games-library', '/profile', '/assessment', '/lessons'];
+    if (supportedPaths.includes(currentPath)) {
+      const pageQuestion = lang === 'ta'
+        ? '💡 இந்தப் பக்கத்தை விளக்கு'
+        : '💡 Explain this page';
+      if (!list.includes(pageQuestion) && !list.some(s => s.includes('Explain this page') || s.includes('பக்கத்தை விளக்கு'))) {
+        list.unshift(pageQuestion);
+      }
+    }
+
+    return list;
   })();
 
   const lastMessage = messages[messages.length - 1];
