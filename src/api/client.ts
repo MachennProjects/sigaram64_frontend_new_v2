@@ -2,11 +2,10 @@
 // Handles all HTTP communication with the backend via REST + JWT
 
 export const getApiUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return `${window.location.protocol}//${window.location.hostname}:4000`;
-  }
-  return envUrl || 'http://localhost:4000';
+  // Always use VITE_API_URL if set (covers both local dev and production builds).
+  // Local dev (.env): VITE_API_URL=http://localhost:4000
+  // Production (Render env): VITE_API_URL=https://sigaram64-backend-new-ytxn.onrender.com
+  return import.meta.env.VITE_API_URL || 'http://localhost:4000';
 };
 
 const API_URL = getApiUrl();
