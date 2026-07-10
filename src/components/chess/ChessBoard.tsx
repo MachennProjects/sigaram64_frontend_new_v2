@@ -11,6 +11,8 @@ interface ChessBoardProps {
   kingInCheck?: string | null;
   hintSquares?: { from: string; to: string } | null;
   hideCheckmateBadges?: boolean;
+  /** Hide the a-h / 1-8 coordinate labels on squares (useful for decorative boards) */
+  hideCoordinates?: boolean;
   /** Squares that can always be targeted regardless of chess legality (star-capture puzzles) */
   freeSquares?: string[];
 }
@@ -42,6 +44,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   kingInCheck = null,
   hintSquares = null,
   hideCheckmateBadges = false,
+  hideCoordinates = false,
   freeSquares = [],
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
@@ -359,7 +362,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
                   )}
 
                   {/* Coordinate: file label (bottom row) */}
-                  {rankIdx === 7 && (
+                  {!hideCoordinates && rankIdx === 7 && (
                     <span
                       className="absolute bottom-[2px] right-[3px] text-[10px] font-bold pointer-events-none z-30 leading-none"
                       style={{ color: isDark ? '#D8B384' : '#805E4B' }}
@@ -369,7 +372,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
                   )}
 
                   {/* Coordinate: rank label (left column) */}
-                  {fileIdx === 0 && (
+                  {!hideCoordinates && fileIdx === 0 && (
                     <span
                       className="absolute top-[2px] left-[3px] text-[10px] font-bold pointer-events-none z-30 leading-none"
                       style={{ color: isDark ? '#D8B384' : '#805E4B' }}

@@ -4,21 +4,21 @@ import { useNavigate } from "react-router-dom";
 import { Crown, Badge, FeatureCard, SectionHeader, StatCard } from "../../ui";
 import logoHorizontal from "../../../assets/Images/Logo/sigaram64_horizontal_transparent_3000.png";
 import { useAuth } from "../../../context/AuthContext";
+import HeroBoardPreview from "../../chess/HeroBoardPreview";
 
 const PILLARS = [
-  { icon:"🧠", title:"Adaptive Assessment",   tag:"Phase 1 · Live", desc:"8–12 min CAT engine. Board clicks only — no notation typing. Elo 400–2400. Bilingual Tamil & English. Accurate from first attempt." },
-  { icon:"♟",  title:"AI Game Analysis",       tag:"Phase 1 · Live", desc:"Stockfish 18 + proprietary WC-ACPL engine. Brilliant/Blunder icons. Phase-weighted mistakes. Skill-normalised scoring." },
-  { icon:"🎙", title:"Tamil Voicebot Coach",   tag:"Phase 1 · Live", desc:"Sarvam AI Tamil + ElevenLabs English. Sub-500ms response. 95%+ accuracy on chess terms. Puzzle hints & analysis narration." },
-  { icon:"📊", title:"District Reporting",     tag:"Phase 1 · Live", desc:"One-click PDF per student, school & district. GPS activity proof. Auto-timestamp. Built exactly for SDAT renewal meetings." },
+  { icon: "🧠", title: "Adaptive Assessment", tag: "Phase 1 · Live", desc: "8–12 min CAT engine. Board clicks only — no notation typing. Elo 400–2400. Bilingual Tamil & English. Accurate from first attempt." },
+  { icon: "♟", title: "AI Game Analysis", tag: "Phase 1 · Live", desc: "Brilliant/Blunder icons. Phase-weighted mistakes. Skill-normalised scoring." },
+  { icon: "🎙", title: "Tamil Voicebot Coach", tag: "Phase 1 · Live", desc: "Sarvam AI Tamil + ElevenLabs English. Sub-500ms response. 95%+ accuracy on chess terms. Puzzle hints & analysis narration." },
 ];
 
 const COMING_SOON = [
-  { icon:"🗺️", title:"Campaign Map",        desc:"23-level Duolingo-style chess journey. XP, streaks, hearts, badges, avatar customisation." },
-  { icon:"🎬", title:"Video Lessons",        desc:"AI-generated lessons with interactive board overlays. Heygen + Higgsfield + Remotion pipeline." },
-  { icon:"🏫", title:"Virtual Live Classes", desc:"Beats Zoom. Synced demo board. AI chess move detection. Auto post-class puzzle packs." },
+  { icon: "🗺️", title: "Campaign Map", desc: "23-level chess journey. XP, streaks, hearts, badges, avatar customisation." },
+  { icon: "🎬", title: "Video Lessons", desc: "Interactive video lesssons with playing experience" },
+  { icon: "🏫", title: "Virtual Live Classes", desc: "AI chess move detection. Auto post-class puzzle packs." },
   { icon:"🏆", title:"Tournament Manager",   desc:"Swiss · Arena · Round Robin. Full bracket with auto-pairing and live results." },
-  { icon:"♟",  title:"Endgame Lab",          desc:"E1–E10: Basic checkmates through GM-level rook endings. Structured progression." },
-  { icon:"🤖", title:"Mantri AI Advisor",    desc:"World's first Tamil-speaking chess AI advisor. LLM-powered position explanations." },
+  { icon:"♟",  title:"Endgame Lab",          desc:"E1–E10: Basic -Grandmaster level endings. Structured progression." },
+  { icon:"🤖", title:"Mantri AI Advisor",    desc:"World's first Tamil-speaking chess AI advisor for learning" },
   { icon:"📱", title:"Native Mobile App",    desc:"iOS + Android. Offline-first puzzle play. Syncs when connection returns." },
   { icon:"🌍", title:"Global Expansion",     desc:"Tamil → Hindi → Arabic → Spanish. FIDE partnership track for international scale." },
 ];
@@ -67,17 +67,13 @@ export default function LandingPage() {
 
         {/* Left copy */}
         <div className="flex-1 z-10 max-w-xl">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-1 h-8 bg-gold rounded" />
-            <span className="text-gold-light text-sm font-medium">FIDE Certified · Tamil Nadu's #1 AI Chess Platform</span>
-          </div>
           <h1 className="text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
             <span className="text-white">India's First </span>
             <span className="text-gold">AI Chess Education </span>
             <span className="text-white">Platform for Schools</span>
           </h1>
           <p className="text-gray-400 text-lg leading-relaxed mb-3">
-            Serving 1,048+ students across Tamil Nadu districts. AI-powered assessment · Stockfish 18 analysis · Tamil Voicebot
+            Serving 1,048+ students across Tamil Nadu districts. AI-powered assessment · Tamil Voicebot
           </p>
           <p className="text-gold-light text-base mb-8">தமிழகத்தின் முதல் AI சதுரங்க கல்விதளம்</p>
           <div className="flex flex-wrap gap-4">
@@ -90,54 +86,27 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Right — Chess board visual */}
-        <div className="flex-1 flex flex-col items-center z-10">
-          <div className="bg-navy-mid rounded-2xl p-5 shadow-2xl">
-            {/* Board */}
-            <div className="grid grid-cols-8 gap-0 border-2 border-navy rounded overflow-hidden mb-3">
-              {Array.from({length:64}).map((_,i) => {
-                const row = Math.floor(i/8), col = i%8;
-                const isDark = (row+col)%2===0;
-                const pieces: Record<string,string> = {
-                  "00":"♜","01":"♞","02":"♝","03":"♛","04":"♚","05":"♝","06":"♞","07":"♜",
-                  "10":"♟","11":"♟","12":"♟","13":"♟","14":"♟","15":"♟","16":"♟","17":"♟",
-                  "60":"♙","61":"♙","62":"♙","63":"♙","64":"♙","65":"♙","66":"♙","67":"♙",
-                  "70":"♖","71":"♘","72":"♗","73":"♕","74":"♔","75":"♗","76":"♘","77":"♖",
-                };
-                const piece = pieces[`${row}${col}`];
-                return (
-                  <div key={i}
-                    className={`w-9 h-9 flex items-center justify-center text-xl select-none ${isDark ? "bg-[#4A6082]" : "bg-[#CBA98F]"}`}>
-                    {piece && <span className={["♜","♞","♝","♛","♚","♟"].includes(piece) ? "text-gray-900" : "text-white drop-shadow-md"}>{piece}</span>}
-                  </div>
-                );
-              })}
-            </div>
-            {/* WC-ACPL badge */}
-            <div className="bg-dark-bg rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-green-400 text-sm font-semibold">WC-ACPL: 24 · Excellent Game ✓</span>
-            </div>
-          </div>
+        {/* Right — 3D Chess Board Visual */}
+        <div className="flex-1 flex items-center justify-center z-10">
+          <HeroBoardPreview size={352} />
         </div>
       </section>
 
       {/* ── STATS BAR ── */}
-      <section className="bg-navy border-y-2 border-gold/40 px-6 lg:px-20 py-8">
+      {/* <section className="bg-navy border-y-2 border-gold/40 px-6 lg:px-20 py-8">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             { n:"1,048+",   l:"Students Trained" },
             { n:"10+",      l:"Districts Covered" },
             { n:"400–2200", l:"Elo Range Served" },
-            { n:"FIDE",     l:"Certified Platform" },
           ].map((s,i) => (
-            <div key={i} className="text-center lg:text-left">
+            <div key={i} className="text-center lg:text-center" >
               <div className="text-gold text-3xl lg:text-4xl font-bold">{s.n}</div>
               <div className="text-gray-400 text-sm mt-1">{s.l}</div>
             </div>
           ))}
         </div>
-      </section>
+      </section> */}
 
       {/* ── FOUR PILLARS ── */}
       <section className="px-6 lg:px-20 py-20 bg-dark-bg">
@@ -145,13 +114,13 @@ export default function LandingPage() {
           title="Built for Every Chess Journey"
           sub="Four AI-powered systems working together to assess, train, coach, and report."
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mt-12">
           {PILLARS.map((p,i) => <FeatureCard key={i} {...p} />)}
         </div>
       </section>
 
       {/* ── FOR GOVERNMENT SCHOOLS / SDAT ── */}
-      <section className="px-6 lg:px-20 py-20 bg-navy">
+      {/* <section className="px-6 lg:px-20 py-20 bg-navy">
         <div className="max-w-3xl mb-12">
           <SectionHeader
             title="Built for Government Schools & SDAT"
@@ -170,7 +139,7 @@ export default function LandingPage() {
           ))}
         </div>
         <button className="btn-gold px-8 py-4 text-base">Book a District Demo →</button>
-      </section>
+      </section> */}
 
       {/* ── COMING SOON SHELF ── */}
       <section className="px-6 lg:px-20 py-20 bg-dark-bg">
@@ -208,7 +177,7 @@ export default function LandingPage() {
             </div>
             <p className="text-gray-400 text-sm">India's First AI Chess Education Platform</p>
             <p className="text-gold-light text-xs mt-1">தமிழகத்தின் முதல் AI சதுரங்க கல்விதளம்</p>
-            <p className="text-gray-500 text-xs mt-3">By Chess Bishop · Prof. SuryaKumar S A, FIDE National Instructor</p>
+            <p className="text-gray-500 text-xs mt-3">By Chess Bishop · Dr. Prof. SuryaKumar S A, FIDE National Instructor</p>
           </div>
           {/* Link columns */}
           {[
@@ -226,7 +195,7 @@ export default function LandingPage() {
           ))}
         </div>
         <div className="border-t border-divider mt-12 pt-6 text-gray-600 text-xs">
-          © 2026 SIGARAM64 · Chess Bishop · All rights reserved · FIDE Certified
+          © 2026 SIGARAM64 · Chess Bishop · All rights reserved 
         </div>
       </footer>
     </div>

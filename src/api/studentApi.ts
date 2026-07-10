@@ -1,5 +1,4 @@
-// SIGARAM64 — Student API
-import { apiGet, apiPut, apiDelete, apiPost, apiGetWithMeta } from './client';
+import { apiGet, apiPut, apiDelete, apiPost, apiGetWithMeta, getApiUrl } from './client';
 
 export const studentApi = {
   /** List students with optional filters */
@@ -39,7 +38,7 @@ export const studentApi = {
 
   /** Bulk import students from JSON array */
   async bulkImport(students: Record<string, string>[], orgId?: string): Promise<any> {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    const API_URL = getApiUrl();
     const token = localStorage.getItem('sigaram64_token');
     
     const response = await fetch(`${API_URL}/api/students/bulk-import`, {
@@ -60,7 +59,7 @@ export const studentApi = {
 
   /** Download bulk import Excel template */
   async downloadBulkTemplate(): Promise<Blob> {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    const API_URL = getApiUrl();
     const token = localStorage.getItem('sigaram64_token');
     
     const response = await fetch(`${API_URL}/api/students/bulk-template`, {

@@ -1,5 +1,4 @@
-// SIGARAM64 — Admin API
-import { apiGet, apiPost, apiPut, apiDelete, apiGetWithMeta } from './client';
+import { apiGet, apiPost, apiPut, apiDelete, apiGetWithMeta, getApiUrl } from './client';
 
 export const adminApi = {
   /** Get platform-wide metrics (super_admin: global, sub_admin: school-scoped) */
@@ -92,7 +91,7 @@ export const adminApi = {
 
   /** Download renewal report PDF */
   async downloadRenewalReportPDF(district: string, period: string): Promise<Blob> {
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    const API_URL = getApiUrl();
     const token = localStorage.getItem('sigaram64_token');
     
     const response = await fetch(`${API_URL}/api/reports/renewal/${encodeURIComponent(district)}/pdf`, {

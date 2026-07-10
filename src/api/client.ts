@@ -1,7 +1,15 @@
 // SIGARAM64 — Central API Client
 // Handles all HTTP communication with the backend via REST + JWT
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+export const getApiUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.protocol}//${window.location.hostname}:4000`;
+  }
+  return envUrl || 'http://localhost:4000';
+};
+
+const API_URL = getApiUrl();
 
 // ── Token Management ────────────────────────────────────────────────────────
 

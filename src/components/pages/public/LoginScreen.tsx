@@ -5,44 +5,45 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import logoHorizontal from "../../../assets/Images/Logo/sigaram64_horizontal_transparent_3000.png";
 import logoIcon from "../../../assets/Images/Logo/sigaram64_icon_transparent_512.png";
+import HeroBoardPreview from "../../chess/HeroBoardPreview";
 
 export default function LoginScreen() {
-  const navigate      = useNavigate();
-  const location      = useLocation();
-  const { login }     = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
 
-  const [lang, setLang]         = useState<"en" | "ta">("en");
-  const [email, setEmail]       = useState("");
+  const [lang, setLang] = useState<"en" | "ta">("en");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw]     = useState(false);
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const from = (location.state as any)?.from?.pathname ?? "/home";
 
   // ── i18n ───────────────────────────────────────────────────────────────────
   const labels = {
     en: {
-      title:   "Sign In to Sigaram64",
-      sub:     "India's First AI Chess Platform",
-      email:   "Email Address",
+      title: "Sign In to Sigaram64",
+      sub: "India's First AI Chess Platform",
+      email: "Email Address",
       emailPh: "you@sigaram64.com",
-      pw:      "Password",
-      login:   "Login",
-      forgot:  "Forgot Password?",
+      pw: "Password",
+      login: "Login",
+      forgot: "Forgot Password?",
       newHere: "New here?",
-      start:   "Start Free Assessment",
+      start: "Start Free Assessment",
     },
     ta: {
-      title:   "சிகரம்64-ல் உள்நுழையவும்",  
-      sub:     "தமிழகத்தின் முதல் AI சதுரங்கக் கல்விதளம்",
-      email:   "மின்னஞ்சல் முகவரி",
+      title: "சிகரம்64-ல் உள்நுழையவும்",
+      sub: "தமிழகத்தின் முதல் AI சதுரங்கக் கல்விதளம்",
+      email: "மின்னஞ்சல் முகவரி",
       emailPh: "you@sigaram64.com",
-      pw:      "கடவுச்சொல்",
-      login:   "உள்நுழைக",
-      forgot:  "கடவுச்சொல் மறந்துவிட்டதா?",
+      pw: "கடவுச்சொல்",
+      login: "உள்நுழைக",
+      forgot: "கடவுச்சொல் மறந்துவிட்டதா?",
       newHere: "புதியவரா?",
-      start:   "இலவச மதிப்பீட்டை தொடங்கு",
+      start: "இலவச மதிப்பீட்டை தொடங்கு",
     },
   };
   const t = labels[lang];
@@ -97,37 +98,9 @@ export default function LoginScreen() {
           <img src={logoHorizontal} alt="SIGARAM64 Logo" className="h-16 w-auto object-contain" />
         </div>
 
-        {/* Chess board visual */}
-        <div
-          className="grid grid-cols-8 rounded-xl overflow-hidden border-2 border-navy-mid shadow-2xl mb-6 xl:mb-10 flex-shrink-0"
-          style={{ width: 'min(260px, 25vh)', height: 'min(260px, 25vh)' }}
-        >
-          {Array.from({ length: 64 }).map((_, i) => {
-            const row = Math.floor(i / 8);
-            const col = i % 8;
-            const isDark = (row + col) % 2 === 0;
-            const pieces: Record<string, string> = {
-              "00": "♜", "01": "♞", "02": "♝", "03": "♛", "04": "♚", "05": "♝", "06": "♞", "07": "♜",
-              "10": "♟", "11": "♟", "12": "♟", "13": "♟", "14": "♟", "15": "♟", "16": "♟", "17": "♟",
-              "60": "♙", "61": "♙", "62": "♙", "63": "♙", "64": "♙", "65": "♙", "66": "♙", "67": "♙",
-              "70": "♖", "71": "♘", "72": "♗", "73": "♕", "74": "♔", "75": "♗", "76": "♘", "77": "♖",
-            };
-            const piece = pieces[`${row}${col}`];
-            const isBlack = piece && ["♜","♞","♝","♛","♚","♟"].includes(piece);
-            return (
-              <div
-                key={i}
-                className={`flex items-center justify-center text-xs select-none aspect-square
-                  ${isDark ? "bg-[#4A6082]" : "bg-[#CBA98F]"}`}
-              >
-                {piece && (
-                  <span className={isBlack ? "text-gray-900 drop-shadow" : "text-white drop-shadow-md"}>
-                    {piece}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+        {/* Premium 3D Chess Board */}
+        <div className="flex items-center justify-center mb-6 xl:mb-8 flex-shrink-0">
+          <HeroBoardPreview size={240} />
         </div>
 
         {/* Tagline */}
@@ -138,13 +111,11 @@ export default function LoginScreen() {
         <p className="text-gray-400 text-center text-xs xl:text-sm mb-1">
           Serving 1,048+ students across Tamil Nadu
         </p>
-        <p className="text-gold-light text-center text-xs xl:text-sm tamil">
-          FIDE சான்றிதழ் பெற்ற தளம்
-        </p>
+
 
         {/* Stat pills */}
         <div className="flex gap-2 mt-5 xl:mt-8">
-          {[{v:"1,048+",l:"Students"},{v:"10+",l:"Districts"},{v:"FIDE",l:"Certified"}].map(s => (
+          {[{ v: "1,048+", l: "Students" }, { v: "10+", l: "Districts" }].map(s => (
             <div key={s.l} className="text-center bg-navy-mid border border-divider rounded-xl px-3 py-1.5">
               <p className="text-gold font-bold text-xs xl:text-sm">{s.v}</p>
               <p className="text-gray-500 text-[10px]">{s.l}</p>

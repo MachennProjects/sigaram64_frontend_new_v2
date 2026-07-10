@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { chatbotApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { VOICE_CONFIG } from '../../config/voiceConfig';
+import logoIcon from '../../assets/Images/Logo/sigaram64_icon_rounded.svg';
 
 interface ChatMessage {
   role: 'user' | 'bot';
@@ -168,25 +169,25 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     ];
   });
 
-  const [input, setInput]             = useState('');
-  const [loading, setLoading]         = useState(false);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(() => {
     const isTa = sessionStorage.getItem('sigaram64_quiz_lang') === 'tamil';
     return isTa ? INITIAL_SUGGESTIONS_TA : INITIAL_SUGGESTIONS_EN;
   });
-  const messagesEndRef                = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // --- Voice Read Aloud (TTS) States ---
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
-  const [playingAudio, setPlayingAudio]   = useState(false);
-  const activeAudioRef                    = useRef<HTMLAudioElement | null>(null);
+  const [playingAudio, setPlayingAudio] = useState(false);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // --- Voice Input (STT) States ---
-  const [micState, setMicState]     = useState<MicState>('idle');
-  const [voiceMode, setVoiceMode]   = useState(false); // true = user is using mic; auto-play TTS on reply
-  const voiceModeRef                = useRef(false);   // Ref mirrors state — safe to read inside async closures
-  const mediaRecorderRef            = useRef<MediaRecorder | null>(null);
-  const audioChunksRef              = useRef<Blob[]>([]);
+  const [micState, setMicState] = useState<MicState>('idle');
+  const [voiceMode, setVoiceMode] = useState(false); // true = user is using mic; auto-play TTS on reply
+  const voiceModeRef = useRef(false);   // Ref mirrors state — safe to read inside async closures
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Sync state if user clicks global toggle in header
   useEffect(() => {
@@ -262,7 +263,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
 
     // Pick speaker and pace from developer config based on current language
     const speaker = lang === 'ta' ? VOICE_CONFIG.tamil.speaker : VOICE_CONFIG.english.speaker;
-    const pace    = lang === 'ta' ? VOICE_CONFIG.tamil.pace    : VOICE_CONFIG.english.pace;
+    const pace = lang === 'ta' ? VOICE_CONFIG.tamil.pace : VOICE_CONFIG.english.pace;
 
     // Strip markdown links like [Label](/path) into "Label" so TTS doesn't read out the raw URLs
     const cleanText = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
@@ -316,8 +317,8 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : '';
+          ? 'audio/webm'
+          : '';
 
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
@@ -331,7 +332,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
         stream.getTracks().forEach(t => t.stop());
 
         const blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-        const ext  = mimeType.includes('webm') ? 'webm' : 'wav';
+        const ext = mimeType.includes('webm') ? 'webm' : 'wav';
         const file = new File([blob], `voice-input.${ext}`, { type: blob.type });
 
         setMicState('processing');
@@ -386,7 +387,7 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     if (!userText || loading) return;
 
     // Get the current active ChessBoard FEN and player color if it exists globally on the page
-    const activeFen   = (window as any).currentChessBoardFen;
+    const activeFen = (window as any).currentChessBoardFen;
     const playerColor = (window as any).currentPlayerColor;
 
     setMessages(m => [...m, { role: 'user', text: userText }]);
@@ -418,25 +419,25 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
     const lowerText = userText.toLowerCase().trim();
 
     // English Checks
-    const isPlayGameEn    = lowerText.includes('where can i play') || lowerText.includes('play game') || lowerText.includes('how to play game') || lowerText === 'where can i play a game?';
-    const isProfileEn     = lowerText.includes('where is my profile') || lowerText.includes('profile page') || lowerText.includes('profile option') || lowerText === 'where is my profile page?';
-    const isHistoryEn     = lowerText.includes('where can i see my game history') || lowerText.includes('see my history') || lowerText.includes('game history') || lowerText.includes('my history') || lowerText === 'where can i see my game history?';
-    const isFamousEn      = lowerText.includes('where can i study famous') || lowerText.includes('famous games') || lowerText.includes('study famous chess games') || lowerText === 'where can i study famous chess games?';
-    const isLanguageEn    = lowerText.includes('how do i change the chatbot language') || lowerText.includes('change language') || lowerText.includes('chatbot language') || lowerText === 'how do i change the chatbot language?';
-    const isRatingEn      = lowerText.includes('where can i see my chess elo') || lowerText.includes('see my elo') || lowerText.includes('my rating') || lowerText.includes('elo rating') || lowerText === 'where can i see my chess elo rating?';
-    const isLessonsEn     = lowerText.includes('where can i watch chess video lessons') || lowerText.includes('watch lessons') || lowerText.includes('video lessons') || lowerText === 'where can i watch chess video lessons?';
-    const isAssessmentEn  = lowerText.includes('where can i take my chess assessment') || lowerText.includes('take my assessment') || lowerText.includes('chess assessment') || lowerText === 'where can i take my chess assessment?';
+    const isPlayGameEn = lowerText.includes('where can i play') || lowerText.includes('play game') || lowerText.includes('how to play game') || lowerText === 'where can i play a game?';
+    const isProfileEn = lowerText.includes('where is my profile') || lowerText.includes('profile page') || lowerText.includes('profile option') || lowerText === 'where is my profile page?';
+    const isHistoryEn = lowerText.includes('where can i see my game history') || lowerText.includes('see my history') || lowerText.includes('game history') || lowerText.includes('my history') || lowerText === 'where can i see my game history?';
+    const isFamousEn = lowerText.includes('where can i study famous') || lowerText.includes('famous games') || lowerText.includes('study famous chess games') || lowerText === 'where can i study famous chess games?';
+    const isLanguageEn = lowerText.includes('how do i change the chatbot language') || lowerText.includes('change language') || lowerText.includes('chatbot language') || lowerText === 'how do i change the chatbot language?';
+    const isRatingEn = lowerText.includes('where can i see my chess elo') || lowerText.includes('see my elo') || lowerText.includes('my rating') || lowerText.includes('elo rating') || lowerText === 'where can i see my chess elo rating?';
+    const isLessonsEn = lowerText.includes('where can i watch chess video lessons') || lowerText.includes('watch lessons') || lowerText.includes('video lessons') || lowerText === 'where can i watch chess video lessons?';
+    const isAssessmentEn = lowerText.includes('where can i take my chess assessment') || lowerText.includes('take my assessment') || lowerText.includes('chess assessment') || lowerText === 'where can i take my chess assessment?';
     const isExplainPageEn = lowerText.includes('explain this page') || lowerText.includes('explain page') || lowerText === 'explain this page' || lowerText === 'explain this page?';
 
     // Tamil Checks
-    const isPlayGameTa    = lowerText.includes('நான் எங்கு கேம் விளையாடலாம்') || lowerText.includes('விளையாடலாம்') || lowerText.includes('கேம் விளையாட') || lowerText === 'நான் எங்கு கேம் விளையாடலாம்?';
-    const isProfileTa     = lowerText.includes('எனது சுயவிவரப் பக்கம் எங்கே உள்ளது') || lowerText.includes('சுயவிவரப் பக்கம்') || lowerText.includes('பயனர் சுயவிவரம்') || lowerText === 'எனது சுயவிவரப் பக்கம் எங்கே உள்ளது?';
-    const isHistoryTa     = lowerText.includes('எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்') || lowerText.includes('விளையாட்டு வரலாறு') || lowerText.includes('வரலாறு எங்கே') || lowerText === 'எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்?';
-    const isFamousTa      = lowerText.includes('பிரபலமான சதுரங்க ஆட்டங்களை') || lowerText.includes('famous games') || lowerText.includes('ஆட்டங்களை எங்கு படிக்கலாம்') || lowerText === 'பிரபலமான சதுரங்க ஆட்டங்களை நான் எங்கு படிக்கலாம்?';
-    const isLanguageTa    = lowerText.includes('எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது') || lowerText.includes('சாட்பாட் மொழி') || lowerText.includes('மொழியை மாற்ற') || lowerText === 'எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது?';
-    const isRatingTa      = lowerText.includes('எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்') || lowerText.includes('elo மதிப்பீடு') || lowerText.includes('மதிப்பீட்டை எங்கே') || lowerText === 'எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்?';
-    const isLessonsTa     = lowerText.includes('நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்') || lowerText.includes('வீடியோ பாடங்கள்') || lowerText.includes('பாடங்களை பார்க்க') || lowerText === 'நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்?';
-    const isAssessmentTa  = lowerText.includes('நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்') || lowerText.includes('மதிப்பீட்டுத் தேர்வு') || lowerText.includes('தேர்வு எழுத') || lowerText === 'நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்?';
+    const isPlayGameTa = lowerText.includes('நான் எங்கு கேம் விளையாடலாம்') || lowerText.includes('விளையாடலாம்') || lowerText.includes('கேம் விளையாட') || lowerText === 'நான் எங்கு கேம் விளையாடலாம்?';
+    const isProfileTa = lowerText.includes('எனது சுயவிவரப் பக்கம் எங்கே உள்ளது') || lowerText.includes('சுயவிவரப் பக்கம்') || lowerText.includes('பயனர் சுயவிவரம்') || lowerText === 'எனது சுயவிவரப் பக்கம் எங்கே உள்ளது?';
+    const isHistoryTa = lowerText.includes('எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்') || lowerText.includes('விளையாட்டு வரலாறு') || lowerText.includes('வரலாறு எங்கே') || lowerText === 'எனது விளையாட்டு வரலாற்றை எங்கே பார்க்கலாம்?';
+    const isFamousTa = lowerText.includes('பிரபலமான சதுரங்க ஆட்டங்களை') || lowerText.includes('famous games') || lowerText.includes('ஆட்டங்களை எங்கு படிக்கலாம்') || lowerText === 'பிரபலமான சதுரங்க ஆட்டங்களை நான் எங்கு படிக்கலாம்?';
+    const isLanguageTa = lowerText.includes('எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது') || lowerText.includes('சாட்பாட் மொழி') || lowerText.includes('மொழியை மாற்ற') || lowerText === 'எனது சாட்பாட் மொழியை எவ்வாறு மாற்றுவது?';
+    const isRatingTa = lowerText.includes('எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்') || lowerText.includes('elo மதிப்பீடு') || lowerText.includes('மதிப்பீட்டை எங்கே') || lowerText === 'எனது சதுரங்க elo மதிப்பீட்டை எங்கே பார்க்கலாம்?';
+    const isLessonsTa = lowerText.includes('நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்') || lowerText.includes('வீடியோ பாடங்கள்') || lowerText.includes('பாடங்களை பார்க்க') || lowerText === 'நான் எங்கு வீடியோ பாடங்களை பார்க்கலாம்?';
+    const isAssessmentTa = lowerText.includes('நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்') || lowerText.includes('மதிப்பீட்டுத் தேர்வு') || lowerText.includes('தேர்வு எழுத') || lowerText === 'நான் எங்கு மதிப்பீட்டு தேர்வை எழுதலாம்?';
     const isExplainPageTa = lowerText.includes('இந்தப் பக்கத்தை விளக்கு') || lowerText.includes('பக்கத்தை விளக்கு') || lowerText === 'இந்தப் பக்கத்தை விளக்கு?';
 
     const isMobile = window.innerWidth < 1024;
@@ -609,8 +610,8 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
   const micTitle = micState === 'recording'
     ? (lang === 'ta' ? 'நிறுத்து' : 'Stop recording')
     : micState === 'processing'
-    ? (lang === 'ta' ? 'மாற்றுகிறது...' : 'Transcribing...')
-    : (lang === 'ta' ? 'குரலில் கேள் (Tamil & English)' : 'Voice input (Tamil & English)');
+      ? (lang === 'ta' ? 'மாற்றுகிறது...' : 'Transcribing...')
+      : (lang === 'ta' ? 'குரலில் கேள் (Tamil & English)' : 'Voice input (Tamil & English)');
 
   return (
     <div
@@ -620,9 +621,9 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#1E2E52] bg-navy-mid select-none flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-lg animate-pulse">🤖</span>
+          <img src={logoIcon} alt="Mantri AI" className="w-7 h-7 object-contain" />
           <div>
-            <p className="text-white text-sm font-bold">Mantri AI Coach</p>
+            <p className="text-white text-sm font-bodld">Mantri AI Coach</p>
             <p className="text-green-400 text-[10px] flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
               Online
@@ -661,11 +662,10 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
               )}
               <div className="relative group max-w-[85%] flex items-end gap-1.5">
                 <div
-                  className={`px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap transition-all shadow-md ${
-                    m.role === 'user'
+                  className={`px-3 py-2 rounded-xl text-xs leading-relaxed whitespace-pre-wrap transition-all shadow-md ${m.role === 'user'
                       ? 'bg-gold text-navy font-bold rounded-br-sm'
                       : 'bg-navy-mid text-gray-200 border border-[#1E2E52]/40 rounded-bl-sm'
-                  }`}
+                    }`}
                 >
                   {renderMessageText(m.text)}
                 </div>
@@ -675,9 +675,8 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
                   <button
                     onClick={() => readAloud(m.text, i)}
                     disabled={loading}
-                    className={`p-1 rounded-md text-[11px] opacity-60 hover:opacity-100 transition-opacity active:scale-90 flex-shrink-0 ${
-                      isSpeaking ? 'text-gold animate-bounce' : 'text-gray-400'
-                    }`}
+                    className={`p-1 rounded-md text-[11px] opacity-60 hover:opacity-100 transition-opacity active:scale-90 flex-shrink-0 ${isSpeaking ? 'text-gold animate-bounce' : 'text-gray-400'
+                      }`}
                     title={
                       isSpeaking
                         ? (lang === 'ta' ? 'நிறுத்து' : 'Stop Reading')
@@ -719,11 +718,10 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
                   <button
                     key={i}
                     onClick={() => sendMessage(q.replace('🔍 ', ''))}
-                    className={`w-full text-left text-[10px] rounded-lg px-3 py-1.5 transition-all hover:translate-x-1 active:scale-95 duration-200 leading-relaxed font-semibold ${
-                      isBoardAction
+                    className={`w-full text-left text-[10px] rounded-lg px-3 py-1.5 transition-all hover:translate-x-1 active:scale-95 duration-200 leading-relaxed font-semibold ${isBoardAction
                         ? 'text-cyan-400 border border-cyan-400/30 bg-cyan-400/5 hover:bg-cyan-400/15'
                         : 'text-gold border border-gold/20 bg-gold/5 hover:bg-gold/15'
-                    }`}
+                      }`}
                   >
                     {q}
                   </button>
@@ -759,8 +757,8 @@ function ChatBotPanel({ onClose }: { onClose: () => void }) {
             micState === 'recording'
               ? (lang === 'ta' ? '🔴 பதிவு செய்கிறது...' : '🔴 Recording...')
               : micState === 'processing'
-              ? (lang === 'ta' ? '⏳ மாற்றுகிறது...' : '⏳ Transcribing...')
-              : (lang === 'ta' ? 'சதுரங்கக் கேள்வி கேளுங்கள்...' : 'Ask a chess question…')
+                ? (lang === 'ta' ? '⏳ மாற்றுகிறது...' : '⏳ Transcribing...')
+                : (lang === 'ta' ? 'சதுரங்கக் கேள்வி கேளுங்கள்...' : 'Ask a chess question…')
           }
           disabled={loading || micState === 'recording'}
           className="flex-1 bg-dark-bg border border-[#1E2E52] rounded-full px-3 py-1.5 text-white text-xs placeholder-gray-500 focus:outline-none focus:border-gold transition-colors disabled:opacity-50"
@@ -786,11 +784,14 @@ export default function ChatBot() {
       {showChat && <ChatBotPanel onClose={() => setShowChat(false)} />}
       <button
         onClick={() => setShowChat(c => !c)}
-        className="fixed bottom-24 lg:bottom-8 right-4 z-[55] w-14 h-14 rounded-full bg-gold shadow-lg flex items-center justify-center text-navy text-2xl hover:bg-gold-light transition-all active:scale-90 animate-glowPulse border-[3px] border-dark-bg"
+        className="fixed bottom-24 lg:bottom-10 right-8 z-[55] w-14 h-14 rounded-full bg-gold shadow-lg flex items-center justify-center text-navy text-2xl hover:bg-gold-light transition-all active:scale-90 animate-glowPulse border-[3px] border-dark-bg"
         title="Ask Mantri AI Coach"
       >
-        🤖
+        <img src={logoIcon} alt="Mantri AI Coach" className="w-9 h-9 object-contain drop-shadow-md" />
       </button>
     </>
   );
 }
+
+
+

@@ -30,9 +30,13 @@ interface CATProfile {
   endgame: { elo: number; bloom: number; weakMotifs: string[] };
   bloomOverall: number;
   puzzlesAttempted: number;
+  puzzlesSolved: number;
   timeTaken: string;
   playerCategory: string;
   aiLevel: number;
+  // Rules gate metadata — only set when assessment ended at gate (not CAT loop)
+  isRulesGateFail?: boolean;
+  rulesGateCorrect?: number;
 }
 
 // ─── Rules Gate Board — matches existing ChessBoard design exactly ────────────
@@ -168,6 +172,20 @@ export default function ChessAssessment() {
   const [currentEstimate, setCurrentEstimate] = useState<number>(1000);
   const [puzzleCount, setPuzzleCount] = useState<number>(0);
 
+  // ── Guest mode — track guestId for all backend requests ──────────────────────
+  const [guestId, setGuestId] = useState<string | null>(null);
+  const guestIdRef = useRef<string | null>(null); // ref for use in async callbacks
+
+  // ── Guest info modal state (name + email collection before results) ───────────
+  const [showGuestInfoModal, setShowGuestInfoModal] = useState<boolean>(false);
+  const [guestInfoName, setGuestInfoName] = useState<string>('');
+  const [guestInfoEmail, setGuestInfoEmail] = useState<string>('');
+  const [guestInfoError, setGuestInfoError] = useState<string>('');
+  const [guestInfoSaving, setGuestInfoSaving] = useState<boolean>(false);
+
+  // Pending results — held until guest info is collected
+  const [pendingProfile, setPendingProfile] = useState<CATProfile | null>(null);
+
   // ── CAT puzzle loop board state ───────────────────────────────────────────────
   const [boardPosition, setBoardPosition] = useState<string>('start');
   const [game, setGame] = useState<Chess>(new Chess());
@@ -181,6 +199,10 @@ export default function ChessAssessment() {
   const timerRef = useRef<any>(null);
   const [warningMessage, setWarningMessage] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  // Ref mirrors to avoid stale closures inside timer callbacks
+  const isSubmittingRef = useRef<boolean>(false);
+  const puzzleStatusRef = useRef<'solving' | 'correct' | 'wrong'>('solving');
+  const submitPuzzleResultRef = useRef<((correct: boolean) => Promise<void>) | undefined>(undefined);
 
   // ── Rules gate state ─────────────────────────────────────────────────────────
   const [ruleTask, setRuleTask] = useState<1 | 2 | 3>(1);
@@ -210,16 +232,30 @@ export default function ChessAssessment() {
   const [showBeginnerNotif, setShowBeginnerNotif] = useState<boolean>(false);
 
   // ─── Timer ────────────────────────────────────────────────────────────────────
+  // FIX: Use a ref-based pattern to avoid stale closure — the timer always calls
+  // the latest version of submitPuzzleResult via submitPuzzleResultRef.
 
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimeLeft(90);
     setStartTime(Date.now());
+    puzzleStatusRef.current = 'solving';
+    isSubmittingRef.current = false;
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timerRef.current);
-          handleTimeout();
+          // Use ref to call the latest version — avoids stale closure
+          if (puzzleStatusRef.current === 'solving' && !isSubmittingRef.current) {
+            puzzleStatusRef.current = 'wrong';
+            setPuzzleStatus('wrong');
+            setWarningMessage(
+              sessionStorage.getItem('sigaram64_quiz_lang') === 'tamil'
+                ? 'நேரம் முடிந்தது! அடுத்த புதிருக்கு செல்கிறது.'
+                : 'Time up! Moving to next puzzle.'
+            );
+            setTimeout(() => submitPuzzleResultRef.current?.(false), 1200);
+          }
           return 0;
         }
         return t - 1;
@@ -243,9 +279,11 @@ export default function ChessAssessment() {
     setBoardPosition(puzzle.fen);
     setMoveIndex(0);
     setPuzzleStatus('solving');
+    puzzleStatusRef.current = 'solving';
     setLastMove(null);
     setHintLevel(0);
     setWarningMessage('');
+    isSubmittingRef.current = false;
     // Lock orientation to the initial puzzle side-to-move
     setPuzzleTurn(g.turn());
     // parse solution UCI list
@@ -263,7 +301,7 @@ export default function ChessAssessment() {
   // ─── Handle board move ────────────────────────────────────────────────────────
 
   const handleBoardMove = useCallback((from: string, to: string, promotion?: string): boolean => {
-    if (puzzleStatus !== 'solving') return false;
+    if (puzzleStatusRef.current !== 'solving') return false;
     const expected = correctMoves[moveIndex];
     if (!expected) return false;
 
@@ -271,10 +309,11 @@ export default function ChessAssessment() {
     const expectedTo = expected.slice(2, 4);
 
     if (from !== expectedFrom || to !== expectedTo) {
+      puzzleStatusRef.current = 'wrong';
       setPuzzleStatus('wrong');
       if (timerRef.current) clearInterval(timerRef.current);
       setWarningMessage(language === 'english' ? 'Wrong move! That is not the correct move.' : 'தவறான நகர்வு! அது சரியான நகர்வு அல்ல.');
-      setTimeout(() => submitPuzzleResult(false), 1200);
+      setTimeout(() => submitPuzzleResultRef.current?.(false), 1200);
       return false;
     }
 
@@ -286,26 +325,24 @@ export default function ChessAssessment() {
     const nextIdx = moveIndex + 1;
 
     if (nextIdx >= correctMoves.length) {
+      puzzleStatusRef.current = 'correct';
       setPuzzleStatus('correct');
       if (timerRef.current) clearInterval(timerRef.current);
-      setTimeout(() => submitPuzzleResult(true), 800);
+      setTimeout(() => submitPuzzleResultRef.current?.(true), 800);
     } else {
       setMoveIndex(nextIdx);
     }
     return true;
-  }, [game, moveIndex, correctMoves, puzzleStatus, language]);
+  }, [game, moveIndex, correctMoves, language]);
 
-  function handleTimeout() {
-    if (puzzleStatus !== 'solving') return;
-    setPuzzleStatus('wrong');
-    setWarningMessage(language === 'english' ? 'Time up! Moving to next puzzle.' : 'நேரம் முடிந்தது! அடுத்த புதிருக்கு செல்கிறது.');
-    setTimeout(() => submitPuzzleResult(false), 1200);
-  }
+  // handleTimeout is no longer needed — the timer callback now calls
+  // submitPuzzleResultRef.current directly to avoid stale closures.
 
   // ─── Submit puzzle result to backend ─────────────────────────────────────────
 
   async function submitPuzzleResult(correct: boolean) {
-    if (isSubmitting || !currentPuzzle || !assessmentId) return;
+    if (isSubmittingRef.current || !currentPuzzle || !assessmentId) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
     try {
@@ -313,17 +350,16 @@ export default function ChessAssessment() {
         puzzleId: currentPuzzle.id,
         correct,
         timeTakenSec: elapsed,
+        guestId: guestIdRef.current ?? undefined,
       }) as any;
 
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
       const newCount = puzzleCount + 1;
       setPuzzleCount(newCount);
 
       if (res.finished || res.status === 'completed') {
-        setProfile(res.profile);
         await saveResults(res.profile);
-        setPhase('submitting');
-        setTimeout(() => setPhase('results'), 1600);
         return;
       }
 
@@ -345,15 +381,21 @@ export default function ChessAssessment() {
       setCurrentPuzzle(res.nextPuzzle);
     } catch (err) {
       console.error('Failed to submit puzzle:', err);
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   }
 
-  // ─── Save results to backend ──────────────────────────────────────────────────
+  // Keep ref in sync so timer can always call the latest version
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { submitPuzzleResultRef.current = submitPuzzleResult; });
+
+  // ─── Save results ─────────────────────────────────────────────────────────────
 
   async function saveResults(p: CATProfile) {
-    try {
-      if (user?.id && user.id !== 'GUEST') {
+    if (user?.id && user.id !== 'GUEST') {
+      // Logged-in student: save immediately to backend
+      try {
         await updateUser(user.id, {
           quizCompleted: true,
           assessmentCompleted: true,
@@ -362,9 +404,24 @@ export default function ChessAssessment() {
           aiLevel: p.aiLevel,
         });
         await refreshUser();
+      } catch (e) {
+        console.error('Error saving assessment results:', e);
       }
-    } catch (e) {
-      console.error('Error saving assessment results:', e);
+      setProfile(p);
+      setPhase('submitting');
+      setTimeout(() => setPhase('results'), 1600);
+    } else {
+      // Guest: store pending result in localStorage for post-login save
+      // Then show guest info modal to collect name + email
+      const pendingData = {
+        profile: p,
+        assessmentId,
+        guestId: guestIdRef.current,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem('sigaram64_pending_assessment', JSON.stringify(pendingData));
+      setPendingProfile(p);
+      setShowGuestInfoModal(true);
     }
   }
 
@@ -426,6 +483,12 @@ export default function ChessAssessment() {
 
       setAssessmentId(res.assessmentId);
 
+      // Capture guestId from backend response if user is not logged in
+      if (!user && res.guestId) {
+        setGuestId(res.guestId);
+        guestIdRef.current = res.guestId;
+      }
+
       if (res.status === 'rules_gate') {
         setPhase('rules_gate');
       } else {
@@ -435,6 +498,32 @@ export default function ChessAssessment() {
     } catch (err) {
       console.error('Failed to start assessment:', err);
     }
+  }
+
+  // ─── Guest info modal submit ──────────────────────────────────────────────────
+
+  async function handleGuestInfoSubmit() {
+    if (!guestInfoName.trim()) { setGuestInfoError('Please enter your name.'); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(guestInfoEmail.trim())) { setGuestInfoError('Please enter a valid email address.'); return; }
+    setGuestInfoError('');
+    setGuestInfoSaving(true);
+    try {
+      await assessmentApi.saveGuestInfo(assessmentId, {
+        guestId: guestIdRef.current!,
+        guestName: guestInfoName.trim(),
+        guestEmail: guestInfoEmail.trim(),
+      });
+    } catch (e) {
+      console.error('Failed to save guest info:', e);
+    } finally {
+      setGuestInfoSaving(false);
+    }
+    // Show results
+    setShowGuestInfoModal(false);
+    setProfile(pendingProfile);
+    setPhase('submitting');
+    setTimeout(() => setPhase('results'), 1600);
   }
 
   // ─── Rules Gate ───────────────────────────────────────────────────────────────
@@ -475,6 +564,7 @@ export default function ChessAssessment() {
         knightMoves: task1Passed,
         checkmateVsStalemate: task2Passed,
         captureFreePiece: task3Passed,
+        guestId: guestIdRef.current ?? undefined,
       });
 
       if (res.passed) {
@@ -485,19 +575,22 @@ export default function ChessAssessment() {
         const failProfile: CATProfile = {
           overallElo: 400,
           ratingDeviation: 350,
-          openings: { elo: 400, bloom: 1, weakMotifs: ['basic_rules'] },
-          middlegame: { elo: 400, bloom: 1, weakMotifs: ['basic_rules'] },
-          endgame: { elo: 400, bloom: 1, weakMotifs: ['basic_rules'] },
+          openings: { elo: 0, bloom: 1, weakMotifs: ['basic_rules'] },
+          middlegame: { elo: 0, bloom: 1, weakMotifs: ['basic_rules'] },
+          endgame: { elo: 0, bloom: 1, weakMotifs: ['basic_rules'] },
           bloomOverall: 1,
-          puzzlesAttempted: 0,
-          timeTaken: '2m 0s',
+          puzzlesAttempted: 3,
+          puzzlesSolved: 0,
+          timeTaken: '—',
           playerCategory: 'Basic Level Player',
           aiLevel: 1,
+          isRulesGateFail: true,
+          rulesGateCorrect: [task1Passed, task2Passed, task3Passed].filter(Boolean).length,
         };
         const backendProfile = res.profile || failProfile;
-        setProfile(backendProfile);
+        // Use saveResults so guests go through modal flow too
         await saveResults(backendProfile);
-        setPhase('results');
+        if (user) setPhase('results'); // guest flow handled inside saveResults
       }
     } catch (err) {
       console.error('Rules gate error:', err);
@@ -921,6 +1014,75 @@ export default function ChessAssessment() {
             >
               {language === 'english' ? '🎓 Start Learning Chess →' : '🎓 சதுரங்கம் கற்கத் தொடங்கு →'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Guest Info Modal — collect name + email before showing results ── */}
+      {showGuestInfoModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}>
+          <div className="w-full max-w-sm bg-[#0E1830] border border-gold/30 rounded-2xl p-6 shadow-2xl animate-scaleIn">
+            <div className="text-center mb-5">
+              <div className="text-5xl mb-3">🏆</div>
+              <h2 className="text-xl font-extrabold text-white mb-1">
+                {language === 'english' ? 'Assessment Complete!' : 'மதிப்பீடு முடிந்தது!'}
+              </h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                {language === 'english'
+                  ? 'Enter your details to see your results. Your score will be saved for future reference.'
+                  : 'உங்கள் முடிவுகளை பார்க்க விவரங்களை உள்ளிடவும்.'}
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-gold-light mb-1">
+                  {language === 'english' ? 'Your Name' : 'உங்கள் பெயர்'}
+                </label>
+                <input
+                  type="text"
+                  value={guestInfoName}
+                  onChange={e => { setGuestInfoName(e.target.value); setGuestInfoError(''); }}
+                  placeholder={language === 'english' ? 'e.g. Arjun Kumar' : 'எ.கா. அர்ஜுன் குமார்'}
+                  className="w-full bg-navy/60 border border-divider/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gold/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gold-light mb-1">
+                  {language === 'english' ? 'Email Address' : 'மின்னஞ்சல்'}
+                </label>
+                <input
+                  type="email"
+                  value={guestInfoEmail}
+                  onChange={e => { setGuestInfoEmail(e.target.value); setGuestInfoError(''); }}
+                  placeholder="name@example.com"
+                  className="w-full bg-navy/60 border border-divider/60 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gold/50"
+                />
+              </div>
+              {guestInfoError && (
+                <p className="text-red-400 text-xs font-medium">{guestInfoError}</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleGuestInfoSubmit}
+              disabled={guestInfoSaving}
+              className="w-full btn-gold py-3 text-sm font-bold shadow-lg disabled:opacity-60 mb-3"
+            >
+              {guestInfoSaving
+                ? (language === 'english' ? 'Saving...' : 'சேமிக்கிறது...')
+                : (language === 'english' ? '🎉 View My Results →' : '🎉 என் முடிவுகளை பார்க்க →')}
+            </button>
+
+            <p className="text-center text-[11px] text-gray-500">
+              {language === 'english' ? 'Already have an account?' : 'ஏற்கனவே கணக்கு இருக்கிறதா?'}{' '}
+              <button
+                onClick={() => navigate('/login')}
+                className="text-gold-light hover:text-gold underline underline-offset-2 font-semibold transition-colors"
+              >
+                {language === 'english' ? 'Sign in' : 'உள்நுழைக'}
+              </button>
+            </p>
           </div>
         </div>
       )}
@@ -1354,7 +1516,7 @@ export default function ChessAssessment() {
               {language === 'english' ? 'Congratulations on completing your chess evaluation!' : 'மதிப்பீட்டை வெற்றிகரமாக முடித்ததற்கு வாழ்த்துகள்!'}
             </p>
 
-            {/* ELO + Category Card (mirrors old Score+ELO grid) */}
+            {/* ELO + Right-side stat */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-navy p-5 rounded-2xl border border-divider text-center shadow-inner relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-[2px] bg-gold/40" />
@@ -1363,16 +1525,42 @@ export default function ChessAssessment() {
                   {T.yourElo}
                 </div>
               </div>
-              <div className="bg-navy p-5 rounded-2xl border border-divider text-center shadow-inner relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-[2px] bg-green-500/40" />
-                <div className="text-green-400 text-2xl font-black">{profile.puzzlesAttempted}</div>
-                <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mt-1">
-                  {language === 'english' ? 'Puzzles Solved' : 'புதிர்கள் தீர்த்தன'}
+
+              {profile.isRulesGateFail ? (
+                /* Rules gate: show X/3 correct */
+                <div className="bg-navy p-5 rounded-2xl border border-divider text-center shadow-inner relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-blue-500/40" />
+                  <div className="text-blue-400 text-2xl font-black">
+                    {profile.rulesGateCorrect ?? profile.puzzlesSolved}
+                    <span className="text-gray-500 text-lg font-bold"> / 3</span>
+                  </div>
+                  <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mt-1">
+                    {language === 'english' ? 'Rules Correct' : 'சரியான விடைகள்'}
+                  </div>
+                  <div className="text-gray-600 text-[9px] mt-0.5">
+                    {language === 'english' ? 'of 3 gate questions' : '3 வாயில் கேள்விகளில்'}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* CAT loop: show puzzlesSolved */
+                <div className="bg-navy p-5 rounded-2xl border border-divider text-center shadow-inner relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-green-500/40" />
+                  <div className="text-green-400 text-2xl font-black">
+                    {profile.puzzlesSolved}
+                  </div>
+                  <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mt-1">
+                    {language === 'english' ? 'Puzzles Solved' : 'சரியான விடைகள்'}
+                  </div>
+                  <div className="text-gray-600 text-[9px] mt-0.5">
+                    {language === 'english'
+                      ? `of ${profile.puzzlesAttempted} attempted`
+                      : `${profile.puzzlesAttempted} இல்`}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Category badge */}
+            {/* Category badge + detail breakdown */}
             <div className="card p-5 border-divider mb-6 bg-navy/60">
               <h2 className="text-gold-light font-bold text-lg leading-tight mb-2">{profile.playerCategory}</h2>
               <div className="mt-1">
@@ -1381,26 +1569,61 @@ export default function ChessAssessment() {
                 </Badge>
               </div>
 
-              {/* Domain breakdown */}
               <div className="mt-5 space-y-2.5 text-xs text-left max-w-xs mx-auto">
-                {(['openings','middlegame','endgame'] as const).map(domain => {
-                  const domainData = profile[domain];
-                  const icons = { openings: '📖', middlegame: '⚔️', endgame: '♟' };
-                  const domainLabel = { openings: T.openings, middlegame: T.middlegame, endgame: T.endgame };
-                  return (
-                    <div key={domain} className="flex items-center justify-between text-gray-300">
-                      <span>{icons[domain]} {domainLabel[domain]}:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold font-mono text-gold-light">{domainData.elo} ELO</span>
-                        <span className="text-gray-500 text-[10px]">B{domainData.bloom}</span>
-                      </div>
+
+                {profile.isRulesGateFail ? (
+                  /* Rules gate failure: hide domain ELOs, show gate breakdown instead */
+                  <>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>🏇 {language === 'english' ? 'Knight Moves:' : 'குதிரை நகர்வு:'}</span>
+                      <span className={`font-bold font-mono ${task1Passed ? 'text-green-400' : 'text-red-400'}`}>
+                        {task1Passed ? '✓ Correct' : '✗ Wrong'}
+                      </span>
                     </div>
-                  );
-                })}
-                <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-divider/40">
-                  <span>🧠 {T.bloom}:</span>
-                  <span className="font-bold font-mono">{profile.bloomOverall} / 6</span>
-                </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>♟ {language === 'english' ? 'Checkmate vs Stalemate:' : 'சத்து vs பாவ:'}</span>
+                      <span className={`font-bold font-mono ${task2Passed ? 'text-green-400' : 'text-red-400'}`}>
+                        {task2Passed ? '✓ Correct' : '✗ Wrong'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>🎯 {language === 'english' ? 'Capture Free Piece:' : 'இலவச காய் பிடிப்பு:'}</span>
+                      <span className={`font-bold font-mono ${task3Passed ? 'text-green-400' : 'text-red-400'}`}>
+                        {task3Passed ? '✓ Correct' : '✗ Wrong'}
+                      </span>
+                    </div>
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 mt-2 text-center">
+                      <p className="text-yellow-300 text-[10px] leading-relaxed">
+                        {language === 'english'
+                          ? '💡 Learn the basics to unlock the full assessment and improve your rating!'
+                          : '💡 முழு மதிப்பீட்டை திறக்க அடிப்படைகளை கற்றுக்கொள்ளுங்கள்!'}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  /* CAT loop: show full domain ELO breakdown */
+                  <>
+                    {(['openings', 'middlegame', 'endgame'] as const).map(domain => {
+                      const domainData = profile[domain];
+                      const icons = { openings: '📖', middlegame: '⚔️', endgame: '♟' };
+                      const domainLabel = { openings: T.openings, middlegame: T.middlegame, endgame: T.endgame };
+                      return (
+                        <div key={domain} className="flex items-center justify-between text-gray-300">
+                          <span>{icons[domain]} {domainLabel[domain]}:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold font-mono text-gold-light">{domainData.elo} ELO</span>
+                            <span className="text-gray-500 text-[10px]">B{domainData.bloom}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-divider/40">
+                      <span>🧠 {T.bloom}:</span>
+                      <span className="font-bold font-mono">{profile.bloomOverall} / 6</span>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex items-center justify-between text-gray-300">
                   <span>⏱ {language === 'english' ? 'Time Taken:' : 'எடுத்த நேரம்:'}</span>
                   <span className="font-bold font-mono">{profile.timeTaken}</span>
@@ -1408,12 +1631,40 @@ export default function ChessAssessment() {
               </div>
             </div>
 
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full btn-gold py-4 text-base font-extrabold shadow-lg animate-pulse"
-            >
-              {T.dashboard}
-            </button>
+            {/* Results CTA — different for logged-in vs guest */}
+            {user ? (
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="w-full btn-gold py-4 text-base font-extrabold shadow-lg animate-pulse"
+              >
+                {T.dashboard}
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-navy/60 border border-gold/20 rounded-2xl p-4 text-center">
+                  <p className="text-gold-light text-sm font-bold mb-1">
+                    {language === 'english' ? '🔐 Save Your ELO Rating!' : '🔐 உங்கள் ELO மதிப்பீட்டை சேமிக்கவும்!'}
+                  </p>
+                  <p className="text-gray-400 text-xs leading-relaxed">
+                    {language === 'english'
+                      ? 'Sign in or register to save your chess rating, play games, and track your progress over time.'
+                      : 'உங்கள் சதுரங்க மதிப்பீட்டை சேமிக்க, விளையாட மற்றும் முன்னேற்றத்தை கண்காணிக்க உள்நுழையுங்கள்.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="w-full btn-gold py-3 text-sm font-extrabold shadow-lg"
+                >
+                  {language === 'english' ? '🎯 Sign In to Save My Rating →' : '🎯 என் மதிப்பீட்டை சேமிக்க உள்நுழைக →'}
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="w-full py-2.5 bg-transparent border border-divider/40 text-gray-400 font-semibold rounded-xl text-xs hover:border-divider/80 transition-colors"
+                >
+                  {language === 'english' ? 'Back to Home' : 'முகப்புக்கு திரும்பு'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

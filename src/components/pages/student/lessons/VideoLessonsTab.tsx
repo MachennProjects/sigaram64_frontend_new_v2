@@ -105,12 +105,12 @@ export default function VideoLessonsTab() {
                 className="absolute inset-0 w-full h-full border-0"
               />
               {/* Invisible overlay cover to prevent clicking Google Drive redirect / popout button in top right corner */}
-              <div 
+              <div
                 className="absolute top-0 right-0 w-16 h-16 z-10 bg-transparent cursor-default pointer-events-auto"
                 title="Video Player Control"
               />
             </div>
-            
+
             <div className="bg-navy-mid rounded-2xl p-6 border border-divider">
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-gold text-xs font-bold tracking-wider uppercase">
@@ -229,7 +229,7 @@ export default function VideoLessonsTab() {
                   10:00
                 </div>
               </div>
-              
+
               <div className="p-5 flex flex-col flex-1 w-full">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-gold text-[10px] font-bold tracking-wider uppercase">

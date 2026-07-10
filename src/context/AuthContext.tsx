@@ -159,7 +159,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await authApi.loginStudent(identifier, password);
       raw = res.user;
     }
-    setUser(normalizeUser(raw));
+    const normalizedUser = normalizeUser(raw);
+    setUser(normalizedUser);
+
+    // ── Post-login: save any pending guest assessment ─────────────────────────
+    try {
+      const pendingRaw = localStorage.getItem('sigaram64_pending_assessment');
+      if (pendingRaw && normalizedUser.role === 'student') {
+        const pending = JSON.parse(pendingRaw);
+        const { updateUser: updateUserFn } = await import('../firebase/firestoreService');
+        await updateUserFn(normalizedUser.id, {
+          quizCompleted: true,
+          assessmentCompleted: true,
+          rating: pending.profile?.overallElo,
+          playerCategory: pending.profile?.playerCategory,
+          aiLevel: pending.profile?.aiLevel,
+        });
+        localStorage.removeItem('sigaram64_pending_assessment');
+        console.log('[Auth] Pending guest assessment saved to profile');
+      }
+    } catch (e) {
+      console.error('[Auth] Failed to save pending assessment:', e);
+    }
   }, []);
 
   // ── Logout ────────────────────────────────────────────────────────────────

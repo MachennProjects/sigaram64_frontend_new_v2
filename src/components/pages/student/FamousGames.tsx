@@ -1,6 +1,6 @@
-// Screen 14 — Famous Games / Legends (historical chess games with board playthrough)
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Chess } from "chess.js";
 import { Badge } from "../../ui";
 import GameViewer from "./famous-games/GameViewer";
 import { lessonApi } from "../../../api";
@@ -154,15 +154,24 @@ const GameListItem = React.memo(({ game, onSelect }: { game: FamousGame; onSelec
 
 /* ── Main Component (List View & Dynamic Loader) ─────────────────────── */
 
-/* ── Helper to map backend game to FamousGame ────────────────────────── */
 function mapBackendGame(g: any): FamousGame {
-  // Parse moves from PGN
-  const moves = g.pgn
-    ? g.pgn
+  // Parse moves from PGN using chess.js to ensure castling (O-O) and other moves aren't broken/dropped
+  let moves: string[] = [];
+  if (g.pgn) {
+    try {
+      const c = new Chess();
+      c.loadPgn(g.pgn);
+      moves = c.history();
+    } catch (err) {
+      console.error("Failed to parse backend game PGN with chess.js:", err);
+      // Fallback parser if chess.js fails
+      moves = g.pgn
+        .replace(/\{[^}]*\}/g, '') // remove comments
         .replace(/\d+\./g, '')
         .split(/\s+/)
-        .filter((m: string) => m.trim().length > 0 && !m.includes('-') && !m.includes('/'))
-    : [];
+        .filter((m: string) => m.trim().length > 0 && !m.includes('/') && m !== '1-0' && m !== '0-1' && m !== '1/2-1/2' && m !== '*');
+    }
+  }
 
   return {
     id: g.id,

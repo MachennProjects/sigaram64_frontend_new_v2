@@ -55,6 +55,11 @@ export const router = createBrowserRouter([
     path: '/home',
     element: <RoleRedirect />,
   },
+  // ── Public assessment — accessible without login ──────────────────────────
+  {
+    path: '/assessment',
+    element: <ChessAssessment />,
+  },
 
   // ── Chess/student pages — ALL roles can access (admins play chess too) ────
   {
@@ -86,7 +91,6 @@ export const router = createBrowserRouter([
               { path: '/profile',                           element: <ProfileScreen /> },
             ],
           },
-          { path: '/assessment', element: <ChessAssessment /> },
           { path: '/lessons',    element: <VideoLessonPlayer /> },
         ],
       },
