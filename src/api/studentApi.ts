@@ -119,4 +119,14 @@ export const studentApi = {
   async getDeletedStudentsGames(): Promise<any[]> {
     return apiGet('/api/students/deleted-games');
   },
+
+  /**
+   * Check which emails from the given list already exist globally in the DB.
+   * Returns { duplicates: string[] } — the subset that are already taken.
+   * Email uniqueness is global (not per-org) due to the email_1 unique index.
+   */
+  async checkEmails(emails: string[]): Promise<{ duplicates: string[] }> {
+    if (!emails.length) return { duplicates: [] };
+    return apiPost('/api/students/check-emails', { emails });
+  },
 };

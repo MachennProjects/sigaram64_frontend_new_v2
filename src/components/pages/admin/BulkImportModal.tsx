@@ -34,6 +34,7 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
   const [summary,     setSummary]     = useState<{created:number;failed:number;total:number}|null>(null);
   const [failedRows,  setFailedRows]  = useState<{ row: number; error: string }[]>([]);
   const [existingRolls, setExistingRolls] = useState<string[]>([]);
+  const [globalDuplicateEmails, setGlobalDuplicateEmails] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [loadingStage, setLoadingStage] = useState<'validating' | 'hashing' | 'creating'>('validating');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +113,63 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
     return getPhoneValidationError(phone) !== null;
   };
 
+  // ── Email validation ────────────────────────────────────────────────────────
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  /** Batch-check all manually entered emails against the global DB. Call on
+   *  file parse and again right before submit. Updates globalDuplicateEmails. */
+  const checkEmailsGlobally = async (rows: Record<string, string>[]) => {
+    const emailSearch = ['email'];
+    const manualEmails = rows
+      .map(row => (row[getHeaderKey(row, emailSearch)] || '').trim().toLowerCase())
+      .filter(e => e && EMAIL_REGEX.test(e));
+
+    if (!manualEmails.length) {
+      setGlobalDuplicateEmails(new Set());
+      return;
+    }
+    try {
+      const { duplicates } = await studentApi.checkEmails(manualEmails);
+      setGlobalDuplicateEmails(new Set(duplicates.map(e => e.toLowerCase())));
+    } catch {
+      // If the call fails, don't block the user — backend will still catch it
+      setGlobalDuplicateEmails(new Set());
+    }
+  };
+
+  const getEmailValidationError = (email: string | undefined, rowIndex: number): string | null => {
+    if (!email || !email.trim()) return null; // blank = auto-generated, fine
+    const trimmed = email.trim().toLowerCase();
+
+    // 1) Format check
+    if (!EMAIL_REGEX.test(trimmed)) {
+      return `"${email.trim()}" is not a valid email address format`;
+    }
+
+    // 2) Already used GLOBALLY in the DB (not just this org)
+    if (globalDuplicateEmails.has(trimmed)) {
+      return `Email "${email.trim()}" already exists in the system (global duplicate)`;
+    }
+
+    // 3) Duplicate within the current spreadsheet
+    const emailSearch = ['email'];
+    for (let i = 0; i < allRows.length; i++) {
+      if (i === rowIndex) continue;
+      const otherRow = allRows[i];
+      const otherEmailKey = getHeaderKey(otherRow, emailSearch);
+      const otherEmail = (otherRow[otherEmailKey] || '').trim().toLowerCase();
+      if (otherEmail && otherEmail === trimmed) {
+        return `Duplicate of Row ${i + 2} inside this spreadsheet`;
+      }
+    }
+
+    return null;
+  };
+
+  const isEmailInvalid = (email: string | undefined, rowIndex: number): boolean => {
+    return getEmailValidationError(email, rowIndex) !== null;
+  };
+
   const normalizeRollNo = (roll: string): string => {
     const val = String(roll).trim().toLowerCase();
     return val.replace(/(?:^|[^0-9])0+(\d+)/g, (match) => {
@@ -174,6 +232,7 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
   
   let duplicateRollsCount = 0;
   let invalidPhonesCount = 0;
+  let invalidEmailsCount = 0;
 
   allRows.forEach((row, idx) => {
     const rollKey = getHeaderKey(row, rollSearch);
@@ -183,6 +242,10 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
     const contactKey = getHeaderKey(row, contactSearch);
     if (isPhoneInvalid(row[contactKey])) {
       invalidPhonesCount++;
+    }
+    const emailKey = getHeaderKey(row, ['email']);
+    if (isEmailInvalid(row[emailKey], idx)) {
+      invalidEmailsCount++;
     }
   });
 
@@ -233,6 +296,8 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
 
         setAllRows(cleaned);
         setStep('upload');
+        // Run global email uniqueness check right after parsing
+        checkEmailsGlobally(cleaned);
       } catch (err: any) {
         setError(err.message || 'Could not parse Excel file. Make sure it is a valid .xlsx file.');
       }
@@ -244,7 +309,10 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
   const handleUpload = async () => {
     if (allRows.length === 0) { setError('No rows to upload'); return; }
     if (isSuperAdmin && !orgId) { setError('Please select an organization first'); return; }
-    
+
+    // Re-run global email check in case user edited cells since file load
+    await checkEmailsGlobally(allRows);
+
     // Check if any numbers are currently invalid
     const contactSearch = ['contactno', 'contact', 'phone'];
     for (let rIdx = 0; rIdx < allRows.length; rIdx++) {
@@ -254,6 +322,19 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
       const validationError = getPhoneValidationError(val);
       if (validationError) {
         setError(`⚠️ Row ${rIdx + 2}: ${validationError}. Please correct it before saving.`);
+        return;
+      }
+    }
+
+    // Check if any manually-entered emails are invalid or already exist in the org
+    const emailSearch = ['email'];
+    for (let rIdx = 0; rIdx < allRows.length; rIdx++) {
+      const row = allRows[rIdx];
+      const emailKey = getHeaderKey(row, emailSearch);
+      const emailVal = row[emailKey];
+      const emailError = getEmailValidationError(emailVal, rIdx);
+      if (emailError) {
+        setError(`⚠️ Row ${rIdx + 2}: ${emailError}. Please correct it before saving.`);
         return;
       }
     }
@@ -548,6 +629,12 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
                   <span>{invalidPhonesCount} student phone number(s) do not have exactly 10 digits. Please check them before submitting.</span>
                 </div>
               )}
+              {invalidEmailsCount > 0 && (
+                <div className="bg-orange-950/20 border border-orange-700/30 text-orange-400 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                  <span>📧</span>
+                  <span>{invalidEmailsCount} email(s) are invalid or already exist in this organization. Please fix or clear them (leave blank for auto-generation).</span>
+                </div>
+              )}
 
               {/* Preview table with inline editing */}
               {allRows.length > 0 && (
@@ -639,8 +726,13 @@ export default function BulkImportModal({ onClose, onSuccess, preselectedOrgId, 
                                 <input
                                   type="text"
                                   value={row[emailKey] || ''}
+                                  title={getEmailValidationError(row[emailKey], i) || 'Leave blank to auto-generate'}
                                   onChange={(e) => handleCellChange(i, emailKey, e.target.value)}
-                                  className="bg-transparent border-b border-transparent hover:border-gold/30 focus:border-gold focus:outline-none w-full text-xs px-1 text-gray-300"
+                                  className={`bg-transparent border-b focus:outline-none w-full text-xs px-1 ${
+                                    isEmailInvalid(row[emailKey], i)
+                                      ? 'text-red-400 border-red-500/50 bg-red-950/10'
+                                      : 'text-gray-300 border-transparent hover:border-gold/30 focus:border-gold'
+                                  }`}
                                   placeholder="Auto-generated"
                                 />
                               </td>
